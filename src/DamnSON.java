@@ -1,8 +1,8 @@
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.Arrays;
-import java.util.Stack;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class DamnSON {
     public static int recLevel = 0;
@@ -36,31 +36,48 @@ public class DamnSON {
     }
 
     public static String getValue(Object o) throws DamnSONException {
-        Class<?>[] trivials = {Integer.class, Double.class, Float.class, Boolean.class};
-        if (Arrays.stream(trivials).anyMatch(x -> x.isInstance(o))){
+        Class<?>[] rawTrivials = {Integer.class, Double.class, Float.class, Boolean.class};
+        if (Arrays.stream(rawTrivials).anyMatch(x -> x.isInstance(o))) {
             return o.toString();
-        }
-        else if (o instanceof String){
+        } else if (o instanceof String) {
             return String.format("\"%s\"", o);
-        }
-        else if (o instanceof Character){
-            return String.format("'%s'",o);
-        }
-        else if (o.getClass().isArray()){
+        } else if (o instanceof Character) {
+            return String.format("'%s'", o);
+        } else if (o.getClass().isArray()) {
             StringBuilder result = new StringBuilder();
             result.append("[");
             int up = 0, down = Array.getLength(o);
-            while (down > 0){
+            while (down > 0) {
                 result.append(getValue(Array.get(o, up)));
                 if (down != 1)
                     result.append(",");
                 else
                     result.append("]");
-                up++;down--;
+                up++;
+                down--;
             }
             return result.toString();
-        }
-        else {
+        } else if (o instanceof List<?> ls){
+            return getValue(ls.toArray());
+        }else if (o instanceof Set<?> s) {
+            return getValue(s.toArray());
+        } else if (o instanceof Map<?, ?> mp) {
+            StringBuilder result = new StringBuilder();
+            result.append('[');
+            AtomicInteger down = new AtomicInteger(mp.size());
+            mp.forEach((i, j) -> {
+                try {
+                    result.append('{').append("key:").append(getValue(i)).append(',').append("value:").append(getValue(j)).append('}');
+                    if (down.getAndDecrement() != 1){
+                        result.append(',');
+                    }
+                } catch (DamnSONException e) {
+                    throw new RuntimeException();
+                }
+            });
+            result.append(']');
+            return result.toString();
+        } else {
             return serialize(o);
         }
     }
@@ -98,4 +115,14 @@ public class DamnSON {
     private static String getTab(int i){
         return " ".repeat(i*4);
     }
+
+    public static DamnSONObject get(Object o){
+        return new DamnSONObject(o);
+    }
 }
+
+//regarding the serialization/deserialization steps of maps/sets
+//those types are typically things you need for access at runtime, their intrinsic
+//form is more like array and object, but you need the sorting and quick lookup provided
+//by these datatypes, so basically storing sets as arrays and maps as entries would be a
+//better solution to reflect the "data passing" nature of JSON, as that's its primary use anyway
