@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 //TODO all fields in damsonobject should accept fieldname with quote marks e.g.
 //TODO "key": value
 //Errors should also be documented for the user
+//Expect should be coupled with advanceone since its basically forced
 public class DamnSON {
     public static String serialize(Object o) throws DamnSONException{
         StringBuilder result = new StringBuilder();
