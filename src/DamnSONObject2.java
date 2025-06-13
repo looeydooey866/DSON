@@ -482,7 +482,7 @@ public class DamnSONObject2 {
         String json2 = DamnSON.serialize(testObject2);
         assert fixFormat(testJSON2).equals(json2);
 
-        //Test on array of ojbects
+        //Test on simple array of ojbects
         TestObject3 testObject3 = new TestObject3();
         String testJSON3 = """
                 {
@@ -508,6 +508,7 @@ public class DamnSONObject2 {
         String json3 = DamnSON.serialize(testObject3);
         assert fixFormat(testJSON3).equals(json3);
 
+        //Test on lists and sets
         TestObject4 testObject4 = new TestObject4();
         String testJSON4 = """
                 {
