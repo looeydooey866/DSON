@@ -1,3 +1,5 @@
+package TestSuite;
+
 public class Apple {
     public int weight;
     public boolean tasty;

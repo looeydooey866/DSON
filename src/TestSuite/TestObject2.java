@@ -1,3 +1,5 @@
+package TestSuite;
+
 public class TestObject2 {
     public int[] numbers;
     public String[] strings;

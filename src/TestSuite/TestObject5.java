@@ -1,3 +1,5 @@
+package TestSuite;
+
 import java.util.Map;
 
 public class TestObject5 {

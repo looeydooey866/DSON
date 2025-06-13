@@ -1,14 +1,14 @@
-import java.lang.reflect.Array;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
+import TestSuite.*;
+
+import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-//TODO watch out for " in strings
+//TODO all fields in damsonobject should accept fieldname with quote marks e.g.
+//TODO "key": value
+//Errors should also be documented for the user
 public class DamnSON {
-    public static int recLevel = 0;
     public static String serialize(Object o) throws DamnSONException{
-        assert recLevel <= 500;
         StringBuilder result = new StringBuilder();
         result.append("{");
         try {
@@ -121,328 +121,651 @@ public class DamnSON {
         return new DamnSONObject(o);
     }
 
-    //hasnext can be replaced by length of json and just how many times u advanced, optimization for later
-
     public static class DamnSONException extends Exception{
-        //well not that much to do here.
-    }
-}
-
-//regarding the serialization/deserialization steps of maps/sets
-//those types are typically things you need for access at runtime, their intrinsic
-//form is more like array and object, but you need the sorting and quick lookup provided
-//by these datatypes, so basically storing sets as arrays and maps as entries would be a
-//better solution to reflect the "data passing" nature of JSON, as that's its primary use anyway
-
-class DamnSONObject {
-    private Object object;
-    private Class<?> c;
-    private List<Field> fields;
-    private Scanner parser;
-    private Map<String,Field> mp;
-
-    public DamnSONObject(Object o){
-        this.object = o;
-        c = o.getClass();
-        fields = new ArrayList<>();
-        mp = new HashMap<>();
-        for (Field f : c.getDeclaredFields()){
-            if (f.isAnnotationPresent(DoNotSerialize.class))
-                continue;
-            fields.add(f);
-            String name = f.getName().toLowerCase();
-            if (f.isAnnotationPresent(Rename.class)){
-                name = f.getAnnotation(Rename.class).value();
-            }
-            mp.put(name, f);
-        }
     }
 
-    private static void removeJunk(String s){
-        StringBuilder result = new StringBuilder();
-        boolean str = false;
-        for (int i=0;i<s.length();i++){
-            if (s.charAt(i) == '"'){
-                str ^= true;
-            }
-            else if (str && s.charAt(i) == ' ');
-            else if (s.charAt(i) != '\n'){
-                result.append(s.charAt(i));
-            }
-        }
-        s = result.toString();
-    }
+    public static class DamnSONObject {
+        private final Object object;
+        private final Class<?> objectClass;
+        private final List<Field> classFields = new ArrayList<>();
+        private final Map<String,Field> fieldGetter = new HashMap<>();
+        private final Map<Class<?>,Class<?>> typeGetter = new HashMap<>();
+        private final Map<Class<?>,Class<?>[]> mapTypeGetter = new HashMap<>();
+        private Scanner queryParser;
 
-    public void parse(String query) throws DamnSON.DamnSONException {
-        removeJunk(query);
-        System.out.println(query);
-        parser = new Scanner(query);
-        parser.useDelimiter("");
-        parseJSON();
-        //this means that there is no precedence based on
-        //the datatype e.g. set vs array, simply use type given from o.
-        //meaning that we can rdp but by referring to o's typeage instead of raw op precedence
-        //but what if there are nested objects? user will instantiate first right? we cannot assume def. constructor anwyay
-    }
+        public DamnSONObject(Object o){
+            this.object = o;
+            this.objectClass = o.getClass();
+            for (Field field : this.objectClass.getFields()){
+                if (field.isAnnotationPresent(DoNotSerialize.class))
+                    continue;
+                classFields.add(field);
+                String canonicalizedName = (
+                    field.isAnnotationPresent(Rename.class)
+                        ? field.getAnnotation(Rename.class).value()
+                        : field.getName().toLowerCase()
+                );
+                fieldGetter.put(canonicalizedName, field);
+            }
+            //The performance diff when these two are inlined to the
+            //loop above can also be examined btw
+            getContainerTypes();
+            getMapTypes();
+        }
 
-    private void parseJSON() throws DamnSON.DamnSONException {
-        expect('{');
-        if (peekChar() == '}')
-            return;
-        do{
-            parseField();
-        } while (peekChar() != ',');//could also be a check for }
-        expect('}');
-    }
+        //The result would be something like: List<TestSuite.Apple> -> TestSuite.Apple
+        private void getContainerTypes(){
+            for (Field field : classFields){
+                Class<?> fieldClass = field.getType();
+                if (isList(fieldClass) || isSet(fieldClass)){
+                    ParameterizedType ptype = (ParameterizedType) field.getGenericType();
+                    Class<?> genericClass = (Class<?>) ptype.getActualTypeArguments()[0];
+                    typeGetter.put(fieldClass, genericClass);
+                }
+            }
+        }
 
-    private void parseField() throws DamnSON.DamnSONException {
-        StringBuilder field = new StringBuilder();
-        do{
-            field.append(parser.next());
-        } while(peekChar() != ':');
-        expect(':');
-        System.err.println("Found the field to be : " + field.toString());
-        Field f = mp.get(field.toString());
-        Class<?> clazz = f.getType();
-        try {
-            f.set(object, parseObject(clazz));
+        //And this one would be something like: Map<Integer, String> -> {Integer, String}
+        private void getMapTypes(){
+            for (Field field : classFields){
+                Class<?> fieldClass = field.getType();
+                if (isMap(fieldClass)){
+                    ParameterizedType ptype = (ParameterizedType) field.getGenericType();
+                    Type[] types = ptype.getActualTypeArguments();
+                    Class<?> keyClass = (Class<?>) types[0];
+                    Class<?> valueClass = (Class<?>) types[1];
+                    mapTypeGetter.put(fieldClass, new Class<?>[]{keyClass,valueClass});
+                }
+            }
         }
-        catch(Exception e){
-            e.printStackTrace();
-        }
-    }
 
-    private Object parseObject(Class<?> clazz) throws DamnSON.DamnSONException {
-        if (isPrimitive(getWrapper(clazz))){
-            return getPrimitive(clazz);
+        //If a string is passed in json, it will be \"
+        //If a string is passed within json, it will be \\\"
+        private static String fixFormat(String s){
+            StringBuilder result = new StringBuilder();
+            boolean isInsideString = false;
+            for (int i = 0; i < s.length(); i++){
+                char cur = s.charAt(i);
+                if (cur == '"' && (i == 0 || !(s.charAt(i-1) == '\\'))){
+                    isInsideString ^= true;
+                } else if (!isInsideString){
+                    //Avoid handling whitespace between json
+                    //Checking if there is a space between field: value
+                    //Would be quite wasteful every time
+                    if (cur == ' ' || cur == '\n')
+                        continue;
+                }
+                result.append(cur);
+            }
+            return result.toString();
         }
-        else if (clazz.isArray()){
-            expect('[');
-            Class<?> arclaz = getWrapper(clazz.getComponentType());
-            List<Object> ls = new ArrayList<>();
-            if (isPrimitive(arclaz)){
-                while (peekChar() != ']'){
-                    ls.add(getPrimitive(arclaz));
-                    if (peekChar() == ',')
-                        parser.next();
-                }
-            }
-            else {
-                while (peekChar() != ']'){
-                    ls.add(parseObject(arclaz));
-                    if (peekChar() == ','){
-                        parser.next();
-                    }
-                }
-            }
-            expect(']');
-            Object ar = Array.newInstance(arclaz,ls.size());
-            for (int i=0;i<ls.size();i++){
-                Array.set(ar, i, ls.get(i));
-            }
-            return ar;
+
+        public void parse(String query) throws DamnSONException{
+            setParser(query);
+            parseJSON();
         }
-        else if (clazz == List.class){
-            expect('[');
-            //TODO fix this part since component type is not for list btw
-            Class<?> arclaz = getWrapper(clazz.getComponentType());
-            System.err.println(arclaz.toString());
-            List<Object> ls = new ArrayList<>();
-            if (isPrimitive(arclaz)){
-                while (peekChar() != ']'){
-                    ls.add(getPrimitive(arclaz));
-                    if (peekChar() == ',')
-                        parser.next();
-                }
-            }
-            else {
-                while (peekChar() != ']'){
-                    ls.add(parseObject(arclaz));
-                    if (peekChar() == ','){
-                        parser.next();
-                    }
-                }
-            }
-            expect(']');
-            return ls;
+
+        private void setParser(String query){
+            String fixedQuery = fixFormat(query);
+            queryParser = new Scanner(fixedQuery);
+            queryParser.useDelimiter("");
         }
-        else if (clazz == Set.class){
-            expect('[');
-            Class<?> arclaz = getWrapper(clazz.getComponentType());
-            Set<Object> ss = new HashSet<>();
-            if (isPrimitive(arclaz)){
-                while (peekChar() != ']'){
-                    ss.add(getPrimitive(arclaz));
-                    if (peekChar() == ',')
-                        parser.next();
+
+        private void overrideParser(Scanner parser){
+            this.queryParser = parser;
+        }
+
+        private char peekOne(){
+            queryParser.hasNext(".*");
+            return queryParser.match().group(0).charAt(0);
+        }
+
+        private boolean endOfLine(){
+            return !queryParser.hasNext();
+        }
+
+        private void expect(char c) throws DamnSONException{
+            if (endOfLine() || peekOne() != c)
+                throw new DamnSONException();
+        }
+
+        private void advanceOne(){
+            queryParser.next();
+        }
+
+        private char nextChar(){
+            return queryParser.next().charAt(0);
+        }
+
+        private String nextCharAsString(){
+            return queryParser.next();
+        }
+
+        private int parseInt(){
+            int result = 0;
+            char next = peekOne();
+            while (next >= '0' && next <= '9'){
+                result = result * 10 + (next - '0');
+                advanceOne();
+                next = peekOne();
+            }
+            return result;
+        }
+
+        private double parseDouble(){
+            double whole = 0, decimal = 0;
+            char next = peekOne();
+            while (next >= '0' && next <= '9'){
+                whole = whole * 10 + (next - '0');
+                advanceOne();
+                next = peekOne();
+            }
+            if (next == '.'){
+                advanceOne();
+                next = peekOne();
+                while (next >= '0' && next <= '9'){
+                    decimal += (next - '0');
+                    decimal /= 10;
+                    advanceOne();
+                    next = peekOne();
                 }
             }
-            else {
-                while (peekChar() != ']'){
-                    ss.add(parseObject(arclaz));
-                    if (peekChar() == ','){
-                        parser.next();
-                    }
+            return whole + decimal;
+        }
+
+        private float parseFloat(){
+            float whole = 0, decimal = 0;
+            char next = peekOne();
+            while (next >= '0' && next <= '9'){
+                whole = whole * 10 + (next - '0');
+                advanceOne();
+                next = peekOne();
+            }
+            if (next == '.'){
+                advanceOne();
+                next = peekOne();
+                while (next >= '0' && next <= '9'){
+                    decimal += (next - '0');
+                    decimal /= 10;
+                    advanceOne();
+                    next = peekOne();
                 }
             }
-            expect(']');
-            return ss;
+            if (next == 'f')
+                advanceOne();
+            return whole + decimal;
         }
-        else if (clazz == Map.class){
-            //key, valeu pair, should we make a entry class
+
+        // Json is case-sensitive
+        private boolean parseBoolean() throws DamnSONException {
+            StringBuilder result = new StringBuilder();
+            char next = peekOne();
+            while (next >= 'a' && next <= 'z'){
+                result.append(next);
+                advanceOne();
+                next = peekOne();
+            }
+            String value = result.toString();
+            if (value.equals("true")){
+                return true;
+            }
+            if (value.equals("false")){
+                return false;
+            }
+            throw new DamnSONException();
         }
-        else {
-            //this is hard, we have to try and get the object then
-            //and  assume the user did not null it in the start
-            //is that how?
+
+        private String parseString() throws DamnSONException{
+            StringBuilder result = new StringBuilder();
+            expect('\"');
+            advanceOne();
+            while (peekOne() != '\"'){
+                result.append(nextCharAsString());
+            }
+            expect('\"');
+            advanceOne();
+            return result.toString();
+        }
+
+        private char parseChar() throws DamnSONException{
+            expect('\'');
+            advanceOne();
+            char result = nextChar();
+            expect('\'');
+            advanceOne();
+            return result;
+        }
+
+        private boolean isPrimitive(Class<?> checkClass){
+            return (checkClass.isPrimitive() || checkClass == String.class);
+        }
+
+        private Class<?> primitiveToWrapper(Class<?> primitiveClass){
+            if (primitiveClass == int.class){
+                return Integer.class;
+            }
+            if (primitiveClass == boolean.class){
+                return Boolean.class;
+            }
+            if (primitiveClass == float.class){
+                return Float.class;
+            }
+            if (primitiveClass == double.class){
+                return Double.class;
+            }
+            if (primitiveClass == char.class){
+                return Character.class;
+            }
+            return primitiveClass;
+        }
+
+        private Class<?> wrapperToPrimitive(Class<?> wrapperClass){
+            if (wrapperClass == Integer.class){
+                return int.class;
+            }
+            if (wrapperClass == Boolean.class){
+                return boolean.class;
+            }
+            if (wrapperClass == Float.class){
+                return float.class;
+            }
+            if (wrapperClass == Double.class){
+                return double.class;
+            }
+            if (wrapperClass == Character.class){
+                return char.class;
+            }
+            return wrapperClass;
+        }
+
+        private Object parsePrimitive(Class<?> primitiveClass) throws DamnSONException{
+            if (primitiveClass == Integer.class){
+                return parseInt();
+            }
+            if (primitiveClass == Double.class){
+                return parseDouble();
+            }
+            if (primitiveClass == Float.class){
+                return parseFloat();
+            }
+            if (primitiveClass == String.class){
+                return parseString();
+            }
+            if (primitiveClass == Character.class){
+                return parseChar();
+            }
+            if (primitiveClass == Boolean.class){
+                return parseBoolean();
+            }
             return null;
         }
-        return null;
-    }
 
-    private int parseInt(){
-        int res = 0;
-        char nx = peekChar();
-        System.err.println(nx);
-        while (nx >= '0' && nx <= '9'){
-            res *= 10;
-            res += nx - '0';
-            parser.next();
-            nx = peekChar();
-            System.err.println(nx);
+        private boolean isTypicalArray(Class<?> arrayClass){
+            return arrayClass.isArray();
         }
-        return res;
-    }
 
-    private double parseDouble(){
-        StringBuilder result = new StringBuilder();
-        char nx = peekChar();
-        while ((nx >= '0' && nx <= '9') || nx == '.'){
-            result.append(nx);
-            parser.next();
-            nx = peekChar();
+        private Object parseTypicalArray(Class<?> arrayClass) throws DamnSONException {
+            expect('[');
+            advanceOne();
+            Class<?> underlyingType = arrayClass.getComponentType();
+            List<Object> objects = new ArrayList<>();
+            char lookahead = peekOne();
+            while (lookahead != ']'){
+                objects.add(parseObject(underlyingType));
+                lookahead = peekOne();
+                if (lookahead != ']') {
+                    expect(',');
+                    advanceOne();
+                    lookahead = peekOne();
+                }
+            }
+            expect(']');
+            advanceOne();
+            Object result = Array.newInstance(underlyingType, objects.size());
+            for (int i = 0; i < objects.size(); i++)
+                Array.set(result, i, objects.get(i));
+            return result;
         }
-        //two . -> double trouble (get it) fix later
-        return Double.parseDouble(result.toString());
-    }
 
-    private float parseFloat(){
-        StringBuilder result = new StringBuilder();
-        char nx = peekChar();
-        while ((nx >= '0' && nx <= '9') || nx == '.'){
-            result.append(nx);
-            parser.next();
-            nx = peekChar();
+        private boolean isList(Class<?> listClass){
+            return listClass == List.class;
         }
-        //two . -> double trouble (get it) fix later
-        return Float.parseFloat(result.toString());
-    }
 
-    private boolean parseBoolean(){
-        //so for this one we need to accept all cases
-        StringBuilder result = new StringBuilder();
-        //basically while the next character is alhphabetic
-        //why? if its not then won't we read the boolean wrongly anyway?
-        char nx = Character.toLowerCase(peekChar());
-        while (nx >= 'a' && nx <= 'z'){
-            result.append(nx);
-            parser.next();
-            nx = Character.toLowerCase(peekChar());
+        private List<?> parseList(Class<?> listClass) throws DamnSONException {
+            Class<?> underlyingClass = typeGetter.get(listClass);
+            expect('[');
+            advanceOne();
+            char lookahead = peekOne();
+            List<Object> result = new ArrayList<>();
+            while (lookahead != ']'){
+                Object element = parseObject(underlyingClass);
+                result.add(element);
+                lookahead = peekOne();
+                if (lookahead != ']'){
+                    expect(',');
+                    advanceOne();
+                    lookahead = peekOne();
+                }
+            }
+            expect(']');
+            advanceOne();
+            return result;
         }
-        //good luck bro i believe in you
-        return Boolean.parseBoolean(result.toString());
-    }
 
-    private String parseString() throws DamnSON.DamnSONException {
-        //I think you're starting to see a pattern here... a *builder* pattern...
-        StringBuilder result = new StringBuilder();
-        expect('"');
-        while (peekChar() != '"'){
-            result.append(parser.next());
+        private boolean isSet(Class<?> setClass){
+            return setClass == Set.class;
         }
-        expect('"');
-        return result.toString();
-    }
 
-    private char parseChar() throws DamnSON.DamnSONException {
-        expect('\'');
-        char result = peekChar();
-        parser.next();
-        expect('\'');
-        return result;
-    }
+        private Set<?> parseSet(Class<?> setClass) throws DamnSONException{
+            Class<?> underlyingClass = typeGetter.get(setClass);
+            expect('[');
+            advanceOne();
+            char lookahead = peekOne();
+            Set<Object> result = new HashSet<>();
+            while (lookahead != ']'){
+                Object element = parseObject(underlyingClass);
+                result.add(element);
+                lookahead = peekOne();
+                if (lookahead != ']'){
+                    expect(',');
+                    advanceOne();
+                    lookahead = peekOne();
+                }
+            }
+            expect(']');
+            advanceOne();
+            return result;
+        }
 
-    private Character peekChar(){
-        parser.hasNext(".*");
-        return parser.match().group(0).charAt(0);
-    }
+        private boolean isMap(Class<?> mapClass){
+            return mapClass == Map.class;
+        }
 
-    private void expect(String s) throws DamnSON.DamnSONException {
-        for (int i=0;i<s.length();i++)
-            expect(s.charAt(i));
-    }
+        private Map<?,?> parseMap(Class<?> mapClass) throws DamnSONException{
+            Class<?>[] mapArguments = mapTypeGetter.get(mapClass);
+            Class<?> keyClass = mapArguments[0];
+            Class<?> valueClass = mapArguments[1];
+            expect('[');
+            advanceOne();
+            char lookahead = peekOne();
+            Map<Object,Object> result = new HashMap<>();
+            //Key and value can be interchangeable
+            StringBuilder commonBuilder = new StringBuilder();
+            //Now, we parse every key-value object
+            while (lookahead != ']'){
+                Object key = null, value = null;
+                expect('{');
+                advanceOne();
+                lookahead = peekOne();
+                commonBuilder.setLength(0);
+                //Linter doesn't like this but it is arguably more readable
+                //I *assume* it will compile to the same bytecode anyway, its just an alias...
+                StringBuilder firstArgument = commonBuilder;
+                while (lookahead != ':'){
+                    firstArgument.append(lookahead);
+                    advanceOne();
+                    lookahead = peekOne();
+                }
+                expect(':');
+                advanceOne();
+                if (firstArgument.toString().equals("key")){
+                    key = parseObject(keyClass);
+                }
+                else if (firstArgument.toString().equals("value")){
+                    value = parseObject(valueClass);
+                }
+                expect(',');
+                advanceOne();
+                lookahead = peekOne();
 
-    private void expect(char c) throws DamnSON.DamnSONException {
-        if (!parser.hasNext()) {
-            throw new DamnSON.DamnSONException();
-        }
-        String x = parser.next();
-        if (x.charAt(0) != c)
-            throw new DamnSON.DamnSONException();
-    }
+                // -- NEXT ITEM --
 
-    private Class<?> getWrapper(Class<?> clazz){
-        if (clazz == int.class){
-            return Integer.class;
+                commonBuilder.setLength(0);
+                StringBuilder secondArgument = commonBuilder;
+                while (lookahead != ':'){
+                    secondArgument.append(lookahead);
+                    advanceOne();
+                    lookahead = peekOne();
+                }
+                expect(':');
+                advanceOne();
+                if (secondArgument.toString().equals("key")){
+                    key = parseObject(keyClass);
+                }
+                else if (secondArgument.toString().equals("value")){
+                    value = parseObject(valueClass);
+                }
+                expect('}');
+                advanceOne();
+                lookahead = peekOne();
+                if (lookahead != ']'){
+                    expect(',');
+                    advanceOne();
+                    lookahead = peekOne();
+                }
+                result.put(key, value);
+            }
+            expect(']');
+            advanceOne();
+            return result;
         }
-        if (clazz == boolean.class){
-            return Boolean.class;
-        }
-        if (clazz == float.class){
-            return Float.class;
-        }
-        if (clazz == double.class){
-            return Double.class;
-        }
-        if (clazz == char.class){
-            return Character.class;
-        }
-        return clazz;
-    }
 
-    private boolean isPrimitive(Class<?> clazz){
-        Class<?>[] classes = new Class<?>[]{Integer.class,Boolean.class,Float.class,Double.class,String.class,Character.class};
-        return Arrays.stream(classes).anyMatch(i->clazz==i);
-    }
+        //This is to be used if it is expected that some nested objects
+        //are not instantiated by the user. Right now, the user must by default
+        //invoke no-arg constructors themselves for initializing their nested objects.
+        //Actually, no. I think this design choice has to be made and will be beneficial
+        private static Object getClassInstance(Class<?> objectClass) throws DamnSONException {
+            try {
+                Constructor<?>[] constructors = objectClass.getConstructors();
+                for (Constructor<?> c : constructors) {
+                    if (c.getParameterCount() == 0) {
+                        return c.newInstance();
+                    }
+                }
+            }
+            catch (Exception e){
+                throw new DamnSONException();
+            }
+            throw new DamnSONException();
+        }
 
-    private Object getPrimitive(Class<?> clazz) throws DamnSON.DamnSONException {
-        if (clazz == Integer.class){
-            return parseInt();
+        private Object parseObject(Class<?> objectClass) throws DamnSONException{
+            if (isPrimitive(wrapperToPrimitive(objectClass))){
+                return parsePrimitive(primitiveToWrapper(objectClass));
+            }
+            else if (isTypicalArray(objectClass)){
+                return parseTypicalArray(objectClass);
+            }
+            else if (isList(objectClass)){
+                return parseList(objectClass);
+            }
+            else if (isSet(objectClass)){
+                return parseSet(objectClass);
+            }
+            else if (isMap(objectClass)){
+                return parseMap(objectClass);
+            }
+            else{
+                Object innerObject = getClassInstance(objectClass);
+                DamnSONObject dson = new DamnSONObject(innerObject);
+                dson.overrideParser(queryParser);
+                dson.parseJSON();
+                return innerObject;
+            }
         }
-        if (clazz == Double.class){
-            return parseDouble();
-        }
-        if (clazz == Float.class){
-            return parseFloat();
-        }
-        if (clazz == String.class){
-            return parseString();
-        }
-        if (clazz == Character.class){
-            return parseChar();
-        }
-        if (clazz == Boolean.class){
-            return parseBoolean();
-        }
-        return null;
-    }
 
-    public static void main(String[] args){
+        private void parseJSON() throws DamnSONException{
+            expect('{');
+            advanceOne();
+            while (true){
+                parseField();
+                if (peekOne() == '}')
+                    break;
+                advanceOne();
+            }
+            expect('}');
+            advanceOne();
+        }
 
-        DamnSONObject o = new DamnSONObject("123}");
-        o.parser = new Scanner("123}");
-        o.parser.useDelimiter("");
+        private void parseField() throws DamnSONException{
+            StringBuilder fieldName = new StringBuilder();
+            while (peekOne() != ':'){
+                fieldName.append(nextCharAsString());
+            }
+            expect(':');
+            advanceOne();
 
-        System.out.println(o.parseInt());
+            Field field = fieldGetter.get(fieldName.toString());
+            Class<?> fieldClass = field.getType();
+            Object value = parseObject(fieldClass);
+            try {
+                field.set(object, value);
+            } catch (Exception e){
+                throw new DamnSONException();
+            }
+        }
+
+        public static void main(String[] args) throws DamnSONException {
+            DamnSONObject test = new DamnSONObject("");
+
+            //parseInt
+            String integerTest = "1024";
+            int integerResult = 1024;
+            test.setParser(integerTest);
+            assert test.parseInt() == integerResult;
+
+            //parseDouble
+            String doubleTest = "1024.2048";
+            double doubleResult = 1024.2048;
+            test.setParser(doubleTest);
+            assert Math.abs(test.parseDouble() - doubleResult) <= 0.0000001;
+
+            //parseFloat
+            int floatTestCount = 5;
+            String[] floatTests = new String[]{"3", "3f", "3.f", ".1f","0.000123"};
+            float[] floatResults = new float[]{3.0f, 3.0f, 3.0f, 0.1f, 0.000123f};
+            for (int i = 0; i < floatTestCount; i++){
+                test.setParser(floatTests[i]);
+                assert Math.abs(test.parseFloat() - floatResults[i]) <= 0.000001f;
+            }
+
+            //parseBoolean
+            int booleanTestCount = 2;
+            String[] booleanTests = new String[]{"true,", "false}}"};
+            boolean[] booleanResults = new boolean[]{true, false};
+            for (int i = 0; i < booleanTestCount; i++){
+                test.setParser(booleanTests[i]);
+                assert test.parseBoolean() == booleanResults[i];
+            }
+
+            //Test on primitive fields
+            TestObject testObject1 = new TestObject();
+            String testJSON1 = "{name:\"jimbob\",age:255}";
+            DamnSONObject obj = new DamnSONObject(testObject1);
+            obj.setParser(testJSON1);
+            obj.parseJSON();
+            String json = serialize(testObject1);
+            assert json.equals(testJSON1);
+
+            //Test on simple arrays
+            TestObject2 testObject2 = new TestObject2();
+            String testJSON2 = """
+                    {
+                        numbers: [1, 2, 3, 5],
+                        strings: ["jim", "bob", "bruhman"]
+                    }
+                    """;
+            DamnSONObject obj2 = new DamnSONObject(testObject2);
+            obj2.setParser(testJSON2);
+            obj2.parseJSON();
+            String json2 = serialize(testObject2);
+            assert fixFormat(testJSON2).equals(json2);
+
+            //Test on simple array of ojbects
+            TestObject3 testObject3 = new TestObject3();
+            String testJSON3 = """
+                    {
+                        apples: [
+                            {
+                                weight: 3,
+                                tasty: true
+                            },
+                            {
+                                weight:100,
+                                tasty: false
+                            },
+                            {
+                                weight: 40,
+                                tasty: true
+                            }
+                        ]
+                    }
+                    """;
+            DamnSONObject obj3 = new DamnSONObject(testObject3);
+            obj3.setParser(testJSON3);
+            obj3.parseJSON();
+            String json3 = serialize(testObject3);
+            assert fixFormat(testJSON3).equals(json3);
+
+            //Test on lists and sets
+            TestObject4 testObject4 = new TestObject4();
+            String testJSON4 = """
+                    {
+                        apples: [
+                            {
+                                weight: 3,
+                                tasty: true
+                            },
+                            {
+                                weight:   100,
+                                tasty: false
+                            },
+                            {
+                                weight: 40,
+                                tasty: true
+                            }
+                        ],
+                        numbers: [1, 2, 3, 4, 5]
+                    }
+                    """;
+            DamnSONObject obj4 = new DamnSONObject(testObject4);
+            obj4.setParser(testJSON4);
+            obj4.parseJSON();
+            String json4 = serialize(testObject4);
+            assert fixFormat(testJSON4).equals(json4);
+
+            TestObject5 testObject5 = new TestObject5();
+            String testJSON5 = """
+                    {
+                        applemap: [
+                        {
+                            key: "HEAVY_APPLE_1",
+                            value: {
+                                weight: 100,
+                                tasty: false
+                            }
+                        },
+                        {
+                            key: "LIGHT_APPLE_1",
+                            value: {
+                                weight: 1,
+                                tasty: true
+                            }
+                        },
+                        {
+                            key: "LIGHT_APPLE_2",
+                            value: {
+                                weight: 3,
+                                tasty: false
+                            }
+                        }]
+                    }
+                    """;
+            DamnSONObject obj5 = new DamnSONObject(testObject5);
+            obj5.setParser(testJSON5);
+            obj5.parseJSON();
+            String json5 = serialize(testObject5);
+            assert fixFormat(testJSON5).equals(json5);
+        }
     }
 }
