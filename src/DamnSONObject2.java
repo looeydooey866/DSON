@@ -380,6 +380,12 @@ public class DamnSONObject2 {
         else if (isTypicalArray(objectClass)){
             return parseTypicalArray(objectClass);
         }
+        else if (isList(objectClass)){
+            return parseList(objectClass);
+        }
+        else if (isSet(objectClass)){
+            return parseSet(objectClass);
+        }
         else{
             Object innerObject = getClassInstance(objectClass);
             DamnSONObject2 dson = new DamnSONObject2(innerObject);
@@ -526,6 +532,6 @@ public class DamnSONObject2 {
         obj4.setParser(testJSON4);
         obj4.parseJSON();
         String json4 = DamnSON.serialize(testObject4);
-        DamnSON.prettyPrint(json4);
+        assert fixFormat(testJSON4).equals(json4);
     }
 }
