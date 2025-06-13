@@ -4,7 +4,7 @@ import java.util.Set;
 public class Dog {
     public String name;
     public boolean isRotating;
-    @Rename(name = "preferredDogTreat")
+    @Rename("preferredDogTreat")
     public Food food;
     public Occupation[] occupations;
     public Set<String> likedDays;

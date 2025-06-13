@@ -1,6 +1,8 @@
+import java.util.List;
+
 public class ElusiveObject {
-    public int[] values;
+    public List<Integer> ls;
     public ElusiveObject(){
-        values = new int[]{1,2,3,4,5};
+
     }
 }

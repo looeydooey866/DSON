@@ -1,15 +1,24 @@
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.util.*;
 
 public class Test {
-    public static void main(String[] args) throws DamnSONException, NoSuchFieldException, IllegalAccessException {
+    public static void main(String[] args) throws DamnSON.DamnSONException, NoSuchFieldException, IllegalAccessException, InstantiationException {
         ElusiveObject e = new ElusiveObject();
         Field f = e.getClass().getFields()[0];
-        if (f.getType().isArray()){
-            System.err.println("True!");
-            f.set(e, new int[]{5,1});
-        }
+        Class<?> clazz = f.getType();
+        System.out.println(clazz.getName());
+        List<Object> ls = new ArrayList<>();
+        ls.add(3);
+        ls.add("hi");
+        ls.add(6);
+        f.set(e,ls);
         String json = DamnSON.serialize(e);
+        DamnSON.prettyPrint(json);
+        ElusiveObject g = new ElusiveObject();
+        DamnSON.get(g).parse(json);
+        g.ls.remove(0);
+        json = DamnSON.serialize(g);
         DamnSON.prettyPrint(json);
     /*
     public static void main(String[] args) throws DamnSONException {

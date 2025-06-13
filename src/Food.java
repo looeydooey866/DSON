@@ -3,6 +3,10 @@ public class Food {
     public boolean containsPineapples;
     public double rating;
 
+    public Food(){
+
+    }
+
     public Food(String name, boolean containsPineapples, double rating){
         assert rating >= 0.0 && rating <= 10.0;
 
