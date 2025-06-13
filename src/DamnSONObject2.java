@@ -354,6 +354,75 @@ public class DamnSONObject2 {
         return mapClass == Map.class;
     }
 
+    private Map<?,?> parseMap(Class<?> mapClass) throws DamnSON.DamnSONException{
+        Class<?>[] mapArguments = mapTypeGetter.get(mapClass);
+        Class<?> keyClass = mapArguments[0];
+        Class<?> valueClass = mapArguments[1];
+        expect('[');
+        advanceOne();
+        char lookahead = peekOne();
+        Map<Object,Object> result = new HashMap<>();
+        //Key and value can be interchangeable
+        StringBuilder commonBuilder = new StringBuilder();
+        //Now, we parse every key-value object
+        while (lookahead != ']'){
+            Object key = null, value = null;
+            expect('{');
+            advanceOne();
+            lookahead = peekOne();
+            commonBuilder.setLength(0);
+            //Linter doesn't like this but it is arguably more readable
+            //I *assume* it will compile to the same bytecode anyway, its just an alias...
+            StringBuilder firstArgument = commonBuilder;
+            while (lookahead != ':'){
+                firstArgument.append(lookahead);
+                advanceOne();
+                lookahead = peekOne();
+            }
+            expect(':');
+            advanceOne();
+            if (firstArgument.toString().equals("key")){
+                key = parseObject(keyClass);
+            }
+            else if (firstArgument.toString().equals("value")){
+                value = parseObject(valueClass);
+            }
+            expect(',');
+            advanceOne();
+            lookahead = peekOne();
+
+            // -- NEXT ITEM --
+
+            commonBuilder.setLength(0);
+            StringBuilder secondArgument = commonBuilder;
+            while (lookahead != ':'){
+                secondArgument.append(lookahead);
+                advanceOne();
+                lookahead = peekOne();
+            }
+            expect(':');
+            advanceOne();
+            if (secondArgument.toString().equals("key")){
+                key = parseObject(keyClass);
+            }
+            else if (secondArgument.toString().equals("value")){
+                value = parseObject(valueClass);
+            }
+            expect('}');
+            advanceOne();
+            lookahead = peekOne();
+            if (lookahead != ']'){
+                expect(',');
+                advanceOne();
+                lookahead = peekOne();
+            }
+            result.put(key, value);
+        }
+        expect(']');
+        advanceOne();
+        return result;
+    }
+
     //This is to be used if it is expected that some nested objects
     //are not instantiated by the user. Right now, the user must by default
     //invoke no-arg constructors themselves for initializing their nested objects.
@@ -385,6 +454,9 @@ public class DamnSONObject2 {
         }
         else if (isSet(objectClass)){
             return parseSet(objectClass);
+        }
+        else if (isMap(objectClass)){
+            return parseMap(objectClass);
         }
         else{
             Object innerObject = getClassInstance(objectClass);
@@ -517,7 +589,7 @@ public class DamnSONObject2 {
                             tasty: true
                         },
                         {
-                            weight:100,
+                            weight:   100,
                             tasty: false
                         },
                         {
@@ -533,5 +605,38 @@ public class DamnSONObject2 {
         obj4.parseJSON();
         String json4 = DamnSON.serialize(testObject4);
         assert fixFormat(testJSON4).equals(json4);
+
+        TestObject5 testObject5 = new TestObject5();
+        String testJSON5 = """
+                {
+                    applemap: [
+                    {
+                        key: "HEAVY_APPLE_1",
+                        value: {
+                            weight: 100,
+                            tasty: false
+                        }
+                    },
+                    {
+                        key: "LIGHT_APPLE_1",
+                        value: {
+                            weight: 1,
+                            tasty: true
+                        }
+                    },
+                    {
+                        key: "LIGHT_APPLE_2",
+                        value: {
+                            weight: 3,
+                            tasty: false
+                        }
+                    }]
+                }
+                """;
+        DamnSONObject2 obj5 = new DamnSONObject2(testObject5);
+        obj5.setParser(testJSON5);
+        obj5.parseJSON();
+        String json5 = DamnSON.serialize(testObject5);
+        assert fixFormat(testJSON5).equals(json5);
     }
 }

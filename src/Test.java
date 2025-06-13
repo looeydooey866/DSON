@@ -3,23 +3,26 @@ import java.lang.reflect.Field;
 import java.util.*;
 
 public class Test {
-    public static void main(String[] args) throws DamnSON.DamnSONException, NoSuchFieldException, IllegalAccessException, InstantiationException {
-        ElusiveObject e = new ElusiveObject();
-        Field f = e.getClass().getFields()[0];
-        Class<?> clazz = f.getType();
-        System.out.println(clazz.getName());
-        List<Object> ls = new ArrayList<>();
-        ls.add(3);
-        ls.add("hi");
-        ls.add(6);
-        f.set(e,ls);
-        String json = DamnSON.serialize(e);
-        DamnSON.prettyPrint(json);
-        ElusiveObject g = new ElusiveObject();
-        DamnSON.get(g).parse(json);
-        g.ls.remove(0);
-        json = DamnSON.serialize(g);
-        DamnSON.prettyPrint(json);
+    /*
+public static void main(String[] args) throws DamnSON.DamnSONException, NoSuchFieldException, IllegalAccessException, InstantiationException {
+}
+    ElusiveObject e = new ElusiveObject();
+    Field f = e.getClass().getFields()[0];
+    Class<?> clazz = f.getType();
+    System.out.println(clazz.getName());
+    List<Object> ls = new ArrayList<>();
+    ls.add(3);
+    ls.add("hi");
+    ls.add(6);
+    f.set(e,ls);
+    String json = DamnSON.serialize(e);
+    DamnSON.prettyPrint(json);
+    ElusiveObject g = new ElusiveObject();
+    DamnSON.get(g).parse(json);
+    g.ls.remove(0);
+    json = DamnSON.serialize(g);
+    DamnSON.prettyPrint(json);
+     */
     /*
     public static void main(String[] args) throws DamnSONException {
         List<String> objects = new ArrayList<>();
@@ -32,7 +35,6 @@ public class Test {
         DamnSON.prettyPrint(json);
 
      */
-    /*
     public static void main(String[] args) {
         Set<String> s = new HashSet<>();
         s.add("Friday");
@@ -57,10 +59,8 @@ public class Test {
             String json = DamnSON.serialize(d);
             DamnSON.prettyPrint(json);
         }
-        catch (DamnSONException d){
+        catch (DamnSON.DamnSONException d){
             System.out.println("womp womp");
         }
-
-     */
     }
 }
