@@ -4,10 +4,6 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-//TODO all fields in damsonobject should accept fieldname with quote marks e.g.
-//TODO "key": value
-//Errors should also be documented for the user
-//Expect should be coupled with advanceone since its basically forced
 public class DamnSON {
     public static String serialize(Object o) throws DamnSONException{
         StringBuilder result = new StringBuilder();
@@ -226,8 +222,13 @@ public class DamnSON {
         }
 
         private void expect(char c) throws DamnSONException{
-            if (endOfLine() || peekOne() != c)
+            if (endOfLine() || queryParser.next().charAt(0) != c)
                 throw new DamnSONException();
+        }
+
+        private void option(char c){
+            if (peekOne() == c)
+                queryParser.next();
         }
 
         private void advanceOne(){
@@ -319,21 +320,17 @@ public class DamnSON {
         private String parseString() throws DamnSONException{
             StringBuilder result = new StringBuilder();
             expect('\"');
-            advanceOne();
             while (peekOne() != '\"'){
                 result.append(nextCharAsString());
             }
             expect('\"');
-            advanceOne();
             return result.toString();
         }
 
         private char parseChar() throws DamnSONException{
             expect('\'');
-            advanceOne();
             char result = nextChar();
             expect('\'');
-            advanceOne();
             return result;
         }
 
@@ -407,7 +404,6 @@ public class DamnSON {
 
         private Object parseTypicalArray(Class<?> arrayClass) throws DamnSONException {
             expect('[');
-            advanceOne();
             Class<?> underlyingType = arrayClass.getComponentType();
             List<Object> objects = new ArrayList<>();
             char lookahead = peekOne();
@@ -416,12 +412,10 @@ public class DamnSON {
                 lookahead = peekOne();
                 if (lookahead != ']') {
                     expect(',');
-                    advanceOne();
                     lookahead = peekOne();
                 }
             }
             expect(']');
-            advanceOne();
             Object result = Array.newInstance(underlyingType, objects.size());
             for (int i = 0; i < objects.size(); i++)
                 Array.set(result, i, objects.get(i));
@@ -435,7 +429,6 @@ public class DamnSON {
         private List<?> parseList(Class<?> listClass) throws DamnSONException {
             Class<?> underlyingClass = typeGetter.get(listClass);
             expect('[');
-            advanceOne();
             char lookahead = peekOne();
             List<Object> result = new ArrayList<>();
             while (lookahead != ']'){
@@ -444,12 +437,10 @@ public class DamnSON {
                 lookahead = peekOne();
                 if (lookahead != ']'){
                     expect(',');
-                    advanceOne();
                     lookahead = peekOne();
                 }
             }
             expect(']');
-            advanceOne();
             return result;
         }
 
@@ -460,7 +451,6 @@ public class DamnSON {
         private Set<?> parseSet(Class<?> setClass) throws DamnSONException{
             Class<?> underlyingClass = typeGetter.get(setClass);
             expect('[');
-            advanceOne();
             char lookahead = peekOne();
             Set<Object> result = new HashSet<>();
             while (lookahead != ']'){
@@ -469,12 +459,10 @@ public class DamnSON {
                 lookahead = peekOne();
                 if (lookahead != ']'){
                     expect(',');
-                    advanceOne();
                     lookahead = peekOne();
                 }
             }
             expect(']');
-            advanceOne();
             return result;
         }
 
@@ -487,7 +475,6 @@ public class DamnSON {
             Class<?> keyClass = mapArguments[0];
             Class<?> valueClass = mapArguments[1];
             expect('[');
-            advanceOne();
             char lookahead = peekOne();
             Map<Object,Object> result = new HashMap<>();
             //Key and value can be interchangeable
@@ -496,7 +483,6 @@ public class DamnSON {
             while (lookahead != ']'){
                 Object key = null, value = null;
                 expect('{');
-                advanceOne();
                 lookahead = peekOne();
                 commonBuilder.setLength(0);
                 //Linter doesn't like this but it is arguably more readable
@@ -508,7 +494,6 @@ public class DamnSON {
                     lookahead = peekOne();
                 }
                 expect(':');
-                advanceOne();
                 if (firstArgument.toString().equals("key")){
                     key = parseObject(keyClass);
                 }
@@ -516,7 +501,6 @@ public class DamnSON {
                     value = parseObject(valueClass);
                 }
                 expect(',');
-                advanceOne();
                 lookahead = peekOne();
 
                 // -- NEXT ITEM --
@@ -529,7 +513,6 @@ public class DamnSON {
                     lookahead = peekOne();
                 }
                 expect(':');
-                advanceOne();
                 if (secondArgument.toString().equals("key")){
                     key = parseObject(keyClass);
                 }
@@ -537,17 +520,14 @@ public class DamnSON {
                     value = parseObject(valueClass);
                 }
                 expect('}');
-                advanceOne();
                 lookahead = peekOne();
                 if (lookahead != ']'){
                     expect(',');
-                    advanceOne();
                     lookahead = peekOne();
                 }
                 result.put(key, value);
             }
             expect(']');
-            advanceOne();
             return result;
         }
 
@@ -597,7 +577,6 @@ public class DamnSON {
 
         private void parseJSON() throws DamnSONException{
             expect('{');
-            advanceOne();
             while (true){
                 parseField();
                 if (peekOne() == '}')
@@ -605,16 +584,16 @@ public class DamnSON {
                 advanceOne();
             }
             expect('}');
-            advanceOne();
         }
 
         private void parseField() throws DamnSONException{
             StringBuilder fieldName = new StringBuilder();
-            while (peekOne() != ':'){
+            option('\"');
+            while (Character.isLetterOrDigit(peekOne())){
                 fieldName.append(nextCharAsString());
             }
+            option('\"');
             expect(':');
-            advanceOne();
 
             Field field = fieldGetter.get(fieldName.toString());
             Class<?> fieldClass = field.getType();
@@ -626,6 +605,10 @@ public class DamnSON {
             }
         }
 
+        /**
+         * Tests the DamnSON parser.
+         * If an assert fails or an exception is thrown, it means that a test has failed.
+         */
         public static void main(String[] args) throws DamnSONException {
             DamnSONObject test = new DamnSONObject("");
 
@@ -767,6 +750,15 @@ public class DamnSON {
             obj5.parseJSON();
             String json5 = serialize(testObject5);
             assert fixFormat(testJSON5).equals(json5);
+
+            //Testing " on field names, which is allowed in JSON
+            TestObject testObject6 = new TestObject();
+            String testJSON6 = "{\"name\":\"jimbob\",\"age\":255}";
+            DamnSONObject obj6 = new DamnSONObject(testObject6);
+            obj6.setParser(testJSON6);
+            obj6.parseJSON();
+            String json6 = serialize(testObject6);
+            assert json6.equals(testJSON1);
         }
     }
 }
