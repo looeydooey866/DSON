@@ -4,25 +4,50 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * A utility class containing all DamnSON functionality.
+ * @author MaximusHartanto
+ */
 public class DamnSON {
+    /**
+     * Serializes an object into standard-JSON format.
+     * This function inspects the object's fields and collates it into a JSON string.
+     * <br>
+     * Do note that non-public fields and fields marked with {@code @DoNotSerialize} will not be included.
+     * <br>
+     * Do also note that fields mraked with the {@code Rename} annotation will be renamed to the user-provided value.
+     * @param o the object to be serialized into JSON.
+     * @return the JSON-formatted object in a single-line string.
+     * @throws DamnSONException if an exception is thrown, something has gone wrong during the serialization process.
+     * @author MaximusHartanto
+     */
     public static String serialize(Object o) throws DamnSONException{
         StringBuilder result = new StringBuilder();
         result.append("{");
         try {
-            Class<?> c = o.getClass();
-            Field[] i = c.getDeclaredFields();
-            for (Field x : i){
-                if (!Modifier.isPublic(x.getModifiers()))
+            Class<?> objectClass = o.getClass();
+            //Gets metadata of all the fields in the object, including its name
+            Field[] fields = objectClass.getDeclaredFields();
+            for (Field field : fields){
+                //Parsing a non-public field is not allowed
+                if (!Modifier.isPublic(field.getModifiers()))
                     continue;
-                if (x.isAnnotationPresent(DoNotSerialize.class))
+                //Do not parse a field that the user does not want parsed
+                if (field.isAnnotationPresent(DoNotSerialize.class))
                     continue;
-                String name = x.getName().toLowerCase();
-                if (x.isAnnotationPresent(Rename.class)){
-                    name = x.getAnnotation(Rename.class).value();
+                String fieldName = field.getName().toLowerCase();
+                //Rename annotation changes the field's JSON name
+                if (field.isAnnotationPresent(Rename.class)){
+                    fieldName = field.getAnnotation(Rename.class).value();
                 }
-                String value = getValue(x.get(o));
-                result.append(name).append(":").append(value).append(",");
+                //Parses the object the field contains
+                String value = getValue(field.get(o));
+                result.append(fieldName).append(":").append(value).append(",");
             }
+            //Removes the last comma
+            //Why? It is not that easy to find out if the current field will be the last one, due to the annotations and publicity check
+            //Sure it can be precalculated, but this is the most convenient way
+            //Another approach is to add all the fields to an arraylist before printing to the stringbuilder
             result.deleteCharAt(result.length()-1);
         }
         catch(Exception e){
@@ -33,11 +58,24 @@ public class DamnSON {
         return result.toString();
     }
 
+    /**
+     * Converts an object into JSON-Object form.
+     * If the object's type is primitive, its absolute string value will be returned.
+     * Otherwise, a JSON object will be created with its own set of field-value keys.
+     * <br>
+     * Note - {@code Arrays}, {@code Lists} and {@code Sets} will all be serialized into comma-separated []-array form, and {@code Maps} will be serialized into a list of {@code key: value} objects.
+     * @param o the object of which the value is stored.
+     * @return a string containing the object's value in valid JSON form.
+     * @throws DamnSONException
+     * @author MaximusHartanto
+     */
     public static String getValue(Object o) throws DamnSONException {
-        Class<?>[] rawTrivials = {Integer.class, Double.class, Float.class, Boolean.class};
-        if (Arrays.stream(rawTrivials).anyMatch(x -> x.isInstance(o))) {
+        //Check if primitive type
+        Class<?>[] primitiveTypes = {Integer.class, Double.class, Float.class, Boolean.class};
+        if (Arrays.stream(primitiveTypes).anyMatch(primitive -> primitive.isInstance(o))) {
             return o.toString();
         } else if (o instanceof String) {
+            //Wrap around quotes
             return String.format("\"%s\"", o);
         } else if (o instanceof Character) {
             return String.format("'%s'", o);
@@ -56,15 +94,19 @@ public class DamnSON {
             }
             return result.toString();
         } else if (o instanceof List<?> ls){
+            //Yes, these two cases boil down to recursive calls. This is done for simplicity's sake
             return getValue(ls.toArray());
-        }else if (o instanceof Set<?> s) {
+        } else if (o instanceof Set<?> s) {
             return getValue(s.toArray());
         } else if (o instanceof Map<?, ?> mp) {
+            //Maps are lists of entry objects. See test number 5 for an example.
             StringBuilder result = new StringBuilder();
             result.append('[');
+            //Don't ask
             AtomicInteger down = new AtomicInteger(mp.size());
             mp.forEach((i, j) -> {
                 try {
+                    //Ignore this gigantic shishkebab of code over here
                     result.append('{').append("key:").append(getValue(i)).append(',').append("value:").append(getValue(j)).append('}');
                     if (down.getAndDecrement() != 1){
                         result.append(',');
@@ -80,9 +122,17 @@ public class DamnSON {
         }
     }
 
+    /**
+     * Pretty-prints a JSON string for pretty-viewing. This will print out the JSON string with properly formatted newlines and spaces.
+     * <br><br>
+     * @implNote  This function is still erroneous, as quote-checking has not been implemented yet.
+     * @param json the JSON string to be pretty-printed.
+     * @author MaximusHartanto
+     */
     public static void prettyPrint(String json){
         StringBuilder result = new StringBuilder();
         int tl = 0;
+        //Why? Commas should be newlined in JSON objects, but not in JSON lists. This stack helps us see if we are currently in a list or in a JSON object.
         Stack<Character> st = new Stack<>();
         for (int i=0;i<json.length();i++){
             if (json.charAt(i) == '['){
@@ -110,17 +160,38 @@ public class DamnSON {
         System.out.println(result);
     }
 
+    /**
+     * Returns spacing that emulates 4-width tabs i times.
+     * @param i the amount of tabs to be emulated.
+     * @return a string containing the whitespace of length i * 4.
+     * @author MaximusHartanto
+     */
     private static String getTab(int i){
         return " ".repeat(i*4);
     }
 
+    /**
+     * Constructs a new DamnSONObject from an object o. A DamnSONObject is used for deserializing JSON into Java objects.
+     * @param o the object to be converted into a DamnSONObject.
+     * @return a DamnSONObject.
+     * @author MaximusHartanto
+     */
     public static DamnSONObject get(Object o){
         return new DamnSONObject(o);
     }
 
+    /**
+     * Exceptions related to DamnSON serialization.
+     * @author MaximusHartanto
+     */
     public static class DamnSONException extends Exception{
     }
 
+    /**
+     * An object which contains JSON deserialization methods. DamnSON objects are constructed using DamnSON's {@code get()} function.
+     * Fields which are non-private and fields that are marked with the {@code DoNotSerialize} annotation will not be deserialized.
+     * Additionally, fields with the {@code Rename} annotation will accept a different field name from JSON.
+     */
     public static class DamnSONObject {
         private final Object object;
         private final Class<?> objectClass;
@@ -134,6 +205,7 @@ public class DamnSON {
             this.object = o;
             this.objectClass = o.getClass();
             for (Field field : this.objectClass.getFields()){
+                //This will NPE if the pesky json attempts to access the field
                 if (field.isAnnotationPresent(DoNotSerialize.class))
                     continue;
                 classFields.add(field);
