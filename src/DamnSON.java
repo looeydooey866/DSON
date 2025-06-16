@@ -18,7 +18,7 @@ public class DamnSON {
      * Do also note that fields mraked with the {@code Rename} annotation will be renamed to the user-provided value.
      * @implNote all fields will be lowercased by default. For example, if you have a field named "intList", it will be reflected as "intlist" in the JSON string.
      * @param o the object to be serialized into JSON.
-     * @return the JSON-formatted object in a single-line string.
+     * @return the JSON-formatted object in a single-line string. Use the {@code prettyPrint()} function to print it properly formatted.
      * @throws DamnSONException if an exception is thrown, something has gone wrong during the serialization process.
      * @author MaximusHartanto
      */
@@ -302,21 +302,41 @@ public class DamnSON {
             parseJSON();
         }
 
+        /**
+         * Prepares the parser for parsing the query. This includes removing whitespace and setting the parser to scan one character at a time.
+         * @param query the string to be parsed and prepared for the parser.
+         */
         private void setParser(String query){
             String fixedQuery = fixFormat(query);
             queryParser = new Scanner(fixedQuery);
+            //This lets us extract characters one at a time from the Scanner
+            //Not very efficient however, since charAt(0) is necessary to get the character
+            //In the future, a bufferedInputStream can be used instead for more efficiency
             queryParser.useDelimiter("");
         }
 
+        /**
+         * Overrides the query parser by setting it to another Scanner completely. For internal use only.
+         * @param parser the Scanner to be used as the queryParser.
+         */
         private void overrideParser(Scanner parser){
             this.queryParser = parser;
         }
 
+        /**
+         * Peeks one character ahead to see the next character in the Scanner (a bit hacky). If the scanner is currently reading "hello world", this will return 'h'.
+         * @return the lookahead character in the Scanner.
+         */
         private char peekOne(){
+            //TODO does this have to be called over and over again?
             queryParser.hasNext(".*");
             return queryParser.match().group(0).charAt(0);
         }
 
+        /**
+         * Checks if the parser has reached the end of the JSON string, and if there are no more characters to parse.
+         * @return a boolean, {@code true} if there are no more characters to be parsed.
+         */
         private boolean endOfLine(){
             return !queryParser.hasNext();
         }
