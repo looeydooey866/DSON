@@ -16,6 +16,7 @@ public class DamnSON {
      * Do note that non-public fields and fields marked with {@code @DoNotSerialize} will not be included.
      * <br>
      * Do also note that fields mraked with the {@code Rename} annotation will be renamed to the user-provided value.
+     * @implNote all fields will be lowercased by default. For example, if you have a field named "intList", it will be reflected as "intlist" in the JSON string.
      * @param o the object to be serialized into JSON.
      * @return the JSON-formatted object in a single-line string.
      * @throws DamnSONException if an exception is thrown, something has gone wrong during the serialization process.
@@ -35,11 +36,12 @@ public class DamnSON {
                 //Do not parse a field that the user does not want parsed
                 if (field.isAnnotationPresent(DoNotSerialize.class))
                     continue;
-                String fieldName = field.getName().toLowerCase();
-                //Rename annotation changes the field's JSON name
-                if (field.isAnnotationPresent(Rename.class)){
-                    fieldName = field.getAnnotation(Rename.class).value();
-                }
+                //Get the field name and rename it if told to
+                String fieldName = (
+                        field.isAnnotationPresent(Rename.class)
+                                ? field.getAnnotation(Rename.class).value()
+                                : field.getName().toLowerCase()
+                );
                 //Parses the object the field contains
                 String value = getValue(field.get(o));
                 result.append(fieldName).append(":").append(value).append(",");
@@ -66,7 +68,7 @@ public class DamnSON {
      * Note - {@code Arrays}, {@code Lists} and {@code Sets} will all be serialized into comma-separated []-array form, and {@code Maps} will be serialized into a list of {@code key: value} objects.
      * @param o the object of which the value is stored.
      * @return a string containing the object's value in valid JSON form.
-     * @throws DamnSONException
+     * @throws DamnSONException something has went wrong during the serialization process.
      * @author MaximusHartanto
      */
     public static String getValue(Object o) throws DamnSONException {
@@ -191,6 +193,7 @@ public class DamnSON {
      * An object which contains JSON deserialization methods. DamnSON objects are constructed using DamnSON's {@code get()} function.
      * Fields which are non-private and fields that are marked with the {@code DoNotSerialize} annotation will not be deserialized.
      * Additionally, fields with the {@code Rename} annotation will accept a different field name from JSON.
+     * @author MaximusHartanto
      */
     public static class DamnSONObject {
         private final Object object;
@@ -201,7 +204,12 @@ public class DamnSON {
         private final Map<Class<?>,Class<?>[]> mapTypeGetter = new HashMap<>();
         private Scanner queryParser;
 
-        public DamnSONObject(Object o){
+        /**
+         * Constructs a DamnSON object from an object.
+         * When the DamnSON object is parsed, the original object's fields will be updated with new values.
+         * @param o the object to be parsed
+         */
+        private DamnSONObject(Object o){
             this.object = o;
             this.objectClass = o.getClass();
             for (Field field : this.objectClass.getFields()){
@@ -218,23 +226,30 @@ public class DamnSON {
             }
             //The performance diff when these two are inlined to the
             //loop above can also be examined btw
+
+            //These two functions get metadata about list types (annoying type erasure)
+            //E.g. if the field is a List<Integer> these two would get the Integer class out of it
             getContainerTypes();
             getMapTypes();
         }
 
-        //The result would be something like: List<TestSuite.Apple> -> TestSuite.Apple
+        /**
+         * Populates the typeGetter map with the inner types of {@code Lists} and {@code Sets}. The result would be something like: List<TestSuite.Apple> -> TestSuite.Apple.
+         */
         private void getContainerTypes(){
             for (Field field : classFields){
                 Class<?> fieldClass = field.getType();
                 if (isList(fieldClass) || isSet(fieldClass)){
+                    //Yea don't mind this...
                     ParameterizedType ptype = (ParameterizedType) field.getGenericType();
                     Class<?> genericClass = (Class<?>) ptype.getActualTypeArguments()[0];
                     typeGetter.put(fieldClass, genericClass);
                 }
             }
         }
-
-        //And this one would be something like: Map<Integer, String> -> {Integer, String}
+        /**
+         * Populates the mapTypeGetter map with the inner key & value types of {@code Maps}. The result would be something like: Map<Integer, String> -> {Integer, String}.
+         */
         private void getMapTypes(){
             for (Field field : classFields){
                 Class<?> fieldClass = field.getType();
@@ -248,19 +263,23 @@ public class DamnSON {
             }
         }
 
-        //If a string is passed in json, it will be \"
-        //If a string is passed within json, it will be \\\"
+        /**
+         * Prepares a String for parsing by removing redundant whitespace. It is not trivial as Strings also contain whitespace.
+         * @param s the string to be pre-formatted.
+         * @return a new properly formatted String.
+         */
         private static String fixFormat(String s){
             StringBuilder result = new StringBuilder();
+            //To be real, the only case we need to handle is strings, since we need to keep all the whitespace within them
+            //TODO create test for this
             boolean isInsideString = false;
             for (int i = 0; i < s.length(); i++){
                 char cur = s.charAt(i);
+                //If a string is passed in json, it will be \"
+                //If a string is passed within json, it will be \\\"
                 if (cur == '"' && (i == 0 || !(s.charAt(i-1) == '\\'))){
                     isInsideString ^= true;
                 } else if (!isInsideString){
-                    //Avoid handling whitespace between json
-                    //Checking if there is a space between field: value
-                    //Would be quite wasteful every time
                     if (cur == ' ' || cur == '\n')
                         continue;
                 }
@@ -269,8 +288,17 @@ public class DamnSON {
             return result.toString();
         }
 
-        public void parse(String query) throws DamnSONException{
-            setParser(query);
+        /**
+         * Deserializes a JSON string into this DamnSON object.
+         * This populates the object's fields with data retrieved from JSON.
+         * @implNote Do note that all object field names will be lowercased by default, the lowercase name will be used to search for fields within the JSON.
+         * For example, if you have a field called theNumberThree, the entry with the name "thenumberthree: ..." will be associated with that field.
+         * @param JSON the JSON string to be deserialized.
+         * The string will be automatically formatted and no removal of whitespace/newlines is necessary.
+         * @throws DamnSONException an error has occured during deserialization.
+         */
+        public void parse(String JSON) throws DamnSONException{
+            setParser(JSON);
             parseJSON();
         }
 
@@ -831,6 +859,8 @@ public class DamnSON {
             obj6.parseJSON();
             String json6 = serialize(testObject6);
             assert json6.equals(testJSON1);
+
+            //TODO add tests for rename btw
         }
     }
 }
