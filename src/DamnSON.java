@@ -598,6 +598,14 @@ public class DamnSON {
             return wrapperClass;
         }
 
+        /**
+         * Parses a primitive class using its associated parse function.
+         * If the class is not a primitive, nothing will happen.
+         * Additionally, this function checks for the primitive class's wrapper class and pure primitive classes is not supported.
+         * @param primitiveClass the wrapper class to be parsed.
+         * @return an Object with the parsed value.
+         * @throws DamnSONException If something has gone wrong during the parsing process, an exception will be thrown.
+         */
         private Object parsePrimitive(Class<?> primitiveClass) throws DamnSONException{
             if (primitiveClass == Integer.class){
                 return parseInt();
@@ -620,10 +628,21 @@ public class DamnSON {
             return null;
         }
 
+        /**
+         * Checks if a class is a Java array type, e.g. {@code int[] a}.
+         * @param arrayClass the class to be checked.
+         * @return a boolean - true if the given class is one of an Array type.
+         */
         private boolean isTypicalArray(Class<?> arrayClass){
             return arrayClass.isArray();
         }
 
+        /**
+         * Parses an array in the current parsing position. This function expects an array starting and ending with square brackets, and separated with commas. An empty array is allowed.
+         * @param arrayClass the class of the array to be parsed.
+         * @return an Object, which is the parsed array value.
+         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         */
         private Object parseTypicalArray(Class<?> arrayClass) throws DamnSONException {
             expect('[');
             Class<?> underlyingType = arrayClass.getComponentType();
@@ -644,10 +663,21 @@ public class DamnSON {
             return result;
         }
 
+        /**
+         * Checks if a given class is one of a List class.
+         * @param listClass the class to be checked.
+         * @return a boolean - true if the class is one of a List class.
+         */
         private boolean isList(Class<?> listClass){
             return listClass == List.class;
         }
 
+        /**
+         * Parses a list from the current parsing position. The type will be deduced from the class object. Square brackets and separator commas are expected during parsing.
+         * @param listClass the class of the object to be parsed.
+         * @return a List object, containing the values from the JSON.
+         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         */
         private List<?> parseList(Class<?> listClass) throws DamnSONException {
             Class<?> underlyingClass = typeGetter.get(listClass);
             expect('[');
@@ -666,10 +696,21 @@ public class DamnSON {
             return result;
         }
 
+        /**
+         * Checks if a class is one of a Set class.
+         * @param setClass the class to be checked.
+         * @return a boolean - true if the class is one of a Set class.
+         */
         private boolean isSet(Class<?> setClass){
             return setClass == Set.class;
         }
 
+        /**
+         * Parses a set class from the current parsing position. Do note that sets have the same syntax as arrays, e.g. square brackets and commas. The parsed type will be deduced from the class object.
+         * @param setClass the class of the object to be parsed.
+         * @return a Set object, containing the parsed data from JSON.
+         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         */
         private Set<?> parseSet(Class<?> setClass) throws DamnSONException{
             Class<?> underlyingClass = typeGetter.get(setClass);
             expect('[');
@@ -688,10 +729,21 @@ public class DamnSON {
             return result;
         }
 
+        /**
+         * Checks if a given class is one of a Map class.
+         * @param mapClass the class to be checked.
+         * @return a boolean - true if the class is one of a Map class.
+         */
         private boolean isMap(Class<?> mapClass){
             return mapClass == Map.class;
         }
 
+        /**
+         * Parses a Map from the current parsing position. Maps are lists of Entry objects, and entry objects contain a "key" field and a "value" field. The type will be automatically deduced from the class passed into the function.
+         * @param mapClass the class of the map to be parsed. Type metadata will be deduced from here.
+         * @return the Map object with data parsed from the JSON.
+         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         */
         private Map<?,?> parseMap(Class<?> mapClass) throws DamnSONException{
             Class<?>[] mapArguments = mapTypeGetter.get(mapClass);
             Class<?> keyClass = mapArguments[0];
@@ -753,10 +805,12 @@ public class DamnSON {
             return result;
         }
 
-        //This is to be used if it is expected that some nested objects
-        //are not instantiated by the user. Right now, the user must by default
-        //invoke no-arg constructors themselves for initializing their nested objects.
-        //Actually, no. I think this design choice has to be made and will be beneficial
+        /**
+         * Gets an instance of a Class, e.g. invokes its no-arg constructor and gets the object created by it. The class must have a no-arg constructor defined for inner nested objects.
+         * @param objectClass the class of the object to be instantiated.
+         * @return the instantiated object.
+         * @throws DamnSONException if the object does not have a suitable constructor, an exception will be thrown.
+         */
         private static Object getClassInstance(Class<?> objectClass) throws DamnSONException {
             try {
                 Constructor<?>[] constructors = objectClass.getConstructors();
@@ -772,6 +826,14 @@ public class DamnSON {
             throw new DamnSONException();
         }
 
+        /**
+         * Parses an object of a class.
+         * This function automatically deduces the correct parsing function from the Class's type metadata.
+         * This function can also be called recursively in the case of object Lists or Arrays, as well as nested objects within classes.
+         * @param objectClass the class to be parsed.
+         * @return an Object, which is the parsed value of the class.
+         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         */
         private Object parseObject(Class<?> objectClass) throws DamnSONException{
             if (isPrimitive(wrapperToPrimitive(objectClass))){
                 return parsePrimitive(primitiveToWrapper(objectClass));
@@ -797,6 +859,10 @@ public class DamnSON {
             }
         }
 
+        /**
+         * Parses a JSON string. This function is the entry point for parsing a JSON.
+         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         */
         private void parseJSON() throws DamnSONException{
             expect('{');
             while (true){
@@ -808,6 +874,10 @@ public class DamnSON {
             expect('}');
         }
 
+        /**
+         * Parses a field from the current parsing position. A field in JSON is a key: value pair, separated by commas. However, there cannot be a comma after the last field.
+         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         */
         private void parseField() throws DamnSONException{
             StringBuilder fieldName = new StringBuilder();
             option('\"');
