@@ -328,7 +328,7 @@ public class DamnSON {
          * @return the lookahead character in the Scanner.
          */
         private char peekOne(){
-            //TODO does this have to be called over and over again?
+            //Has to be called every time since the parser has to re-match.
             queryParser.hasNext(".*");
             return queryParser.match().group(0).charAt(0);
         }
@@ -341,28 +341,59 @@ public class DamnSON {
             return !queryParser.hasNext();
         }
 
+        /**
+         * Expects a character to be the next character in the JSON string. For example, if {@code expect(':')} is ran, the next character MUST be a colon or an exception will be thrown.
+         * <br><br>
+         * Do note that during the process, the character will be consumed at the same time. This is because consuming the character is inevitable in any case.
+         * <br><br>
+         * Do also note that this function checks if the parser has no more tokens to read.
+         * @param c the character to be expected to be the next token.
+         * @throws DamnSONException this means that the next character does not match with the intended one.
+         */
         private void expect(char c) throws DamnSONException{
             if (endOfLine() || queryParser.next().charAt(0) != c)
                 throw new DamnSONException();
         }
 
+        /**
+         * If the next character is equal to c, this function will consume the next character. Otherwise, nothing happens.
+         * <br><br>
+         * This function is helpful when some syntax can be in two forms. For example, fields can either have quote marks, e.g. {@code "key" : 35} or not, e.g. {@code key : 35}.
+         * @param c the optional character
+         */
         private void option(char c){
             if (peekOne() == c)
                 queryParser.next();
         }
 
+        /**
+         * Advances one token ahead in the parser. Does not return anything.
+         */
         private void advanceOne(){
             queryParser.next();
         }
 
+        /**
+         * Advances one token ahead and returns the token consumed by this function.
+         * @return the character consumed by this function
+         */
         private char nextChar(){
             return queryParser.next().charAt(0);
         }
 
+        /**
+         * Returns the next character parsed as a {@code String} rather than a character. This is helpful for some cases to remove
+         * a charAt(0).
+         * @return the next character as a String
+         */
         private String nextCharAsString(){
             return queryParser.next();
         }
 
+        /**
+         * Parses an integer from the current point of the parser. This function reads digits until a non-digit character is encountered.
+         * @return an integer value based on the value parsed.
+         */
         private int parseInt(){
             int result = 0;
             char next = peekOne();
@@ -374,6 +405,16 @@ public class DamnSON {
             return result;
         }
 
+        /**
+         * Parses a double from the current point of the parser. This function can accept these decimal formats:
+         * <br><br>
+         * {@code 1. Whole numbers (e.g. 1)}
+         * <br><br>
+         * {@code 2. Decimals (e.g. 0.1, 0.123, .4)}
+         * <br><br>
+         * The function will stop parsing once a non-digit character is reached (after the first '.', of course)
+         * @return the parsed double value.
+         */
         private double parseDouble(){
             double whole = 0, decimal = 0;
             char next = peekOne();
