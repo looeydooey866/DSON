@@ -436,6 +436,16 @@ public class DamnSON {
             return whole + decimal;
         }
 
+        /**
+         * Parses a float from the current point of the parser. This function can accept these decimal formats:
+         * <br><br>
+         * {@code 1. Whole numbers (e.g. 1)}
+         * <br><br>
+         * {@code 2. Decimals (e.g. 0.1, 0.123, .4f)}
+         * <br><br>
+         * The function will stop parsing once a non-digit character is reached (after the first '.', of course (and the optional f modifier))
+         * @return the parsed float value.
+         */
         private float parseFloat(){
             float whole = 0, decimal = 0;
             char next = peekOne();
@@ -454,12 +464,15 @@ public class DamnSON {
                     next = peekOne();
                 }
             }
-            if (next == 'f')
-                advanceOne();
+            option('f');
             return whole + decimal;
         }
 
-        // Json is case-sensitive
+        /**
+         * Parses a boolean from the current parser position. Do note that Json is case-sensitive. This function will only accept 'true' and 'false' as boolean values, and they must be unwrapped in quotes.
+         * @return the boolean value parsed.
+         * @throws DamnSONException if the input format is invalid, an exception will be thrown.
+         */
         private boolean parseBoolean() throws DamnSONException {
             StringBuilder result = new StringBuilder();
             char next = peekOne();
@@ -478,6 +491,11 @@ public class DamnSON {
             throw new DamnSONException();
         }
 
+        /**
+         * Parses a string from the current parsing position. Strings should be wrapped in {@code \"quotes\"}.
+         * @return the parsed String value.
+         * @throws DamnSONException if the format is invalid, an exception will be thrown.
+         */
         private String parseString() throws DamnSONException{
             StringBuilder result = new StringBuilder();
             expect('\"');
@@ -488,6 +506,11 @@ public class DamnSON {
             return result.toString();
         }
 
+        /**
+         * Parses a singular character from the current parsing position.  Characters should be wrapped in {@code \'quotes\'}.
+         * @return the parsed character value.
+         * @throws DamnSONException if the format is invalid, an exception will be thrown.
+         */
         private char parseChar() throws DamnSONException{
             expect('\'');
             char result = nextChar();
@@ -495,10 +518,35 @@ public class DamnSON {
             return result;
         }
 
+        /**
+         * Checks if a given Class is one of a primitive class. Primitive classes include:
+         * <br>
+         * {@code ints},
+         * {@code booleans},
+         * {@code floats},
+         * {@code doubles},
+         * {@code chars} and
+         * {@code Strings}.
+         * @param checkClass the class to be checked.
+         * @return a boolean - true if the class is primitive.
+         */
         private boolean isPrimitive(Class<?> checkClass){
             return (checkClass.isPrimitive() || checkClass == String.class);
         }
 
+        /**
+         * Converts a primitive class to its Java wrapper class. The conversions are listed as:
+         * <br>
+         * {@code int -> Integer},
+         * {@code boolean -> Boolean},
+         * {@code float -> Float},
+         * {@code double -> Double},
+         * {@code char -> Character},
+         * {@code String -> String},
+         * {@code any other class -> itself}.
+         * @param primitiveClass the class to be converted.
+         * @return the class's Java wrapper class, if it exists.
+         */
         private Class<?> primitiveToWrapper(Class<?> primitiveClass){
             if (primitiveClass == int.class){
                 return Integer.class;
@@ -518,6 +566,19 @@ public class DamnSON {
             return primitiveClass;
         }
 
+        /**
+         * Converts a Java wrapper class to its associated primitive class. The conversions are listed as:
+         * <br>
+         * {@code Integer -> int},
+         * {@code Boolean -> boolean},
+         * {@code Float -> float},
+         * {@code Double -> double},
+         * {@code Character -> char},
+         * {@code String -> String},
+         * {@code any other class -> itself}.
+         * @param wrapperClass the class to be converted.
+         * @return the class's primitive class, if it exists.
+         */
         private Class<?> wrapperToPrimitive(Class<?> wrapperClass){
             if (wrapperClass == Integer.class){
                 return int.class;
