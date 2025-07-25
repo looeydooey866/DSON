@@ -4,7 +4,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * An annotation to be added to object fields. If added to an object field, it will not be serialized into JSON strings by DamnSON.
+ * An annotation to be added to object fields. If added to an object field, it will not be serialized into JSON strings by DSON.
  * Fields annotated with DoNotSerialize will also not accept data from JSON.
  */
 @Retention(RetentionPolicy.RUNTIME)

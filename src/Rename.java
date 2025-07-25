@@ -4,7 +4,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * An annotation to be added to object fields, to change its associated name for DamnSON parsing.
+ * An annotation to be added to object fields, to change its associated name for DSON parsing.
  * To use, simply add the annotation as follows:
  * <br><br>
  * {@code @Rename("number")}
