@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author MaximusHartanto
  */
 public class DSON {
+    public static void main(String[] args) throws DSONException {DSONObject.main(null);}
     /**
      * Serializes an object into standard-JSON format.
      * This function inspects the object's fields and collates it into a JSON string.
@@ -28,11 +29,13 @@ public class DSON {
         try {
             Class<?> objectClass = o.getClass();
             //Gets metadata of all the fields in the object, including its name
+            int success = 0;
             Field[] fields = objectClass.getDeclaredFields();
             for (Field field : fields){
-                //Parsing a non-public field is not allowed
-                if (!Modifier.isPublic(field.getModifiers()))
+                //Bypassing privacy
+                if (!field.trySetAccessible()){
                     continue;
+                }
                 //Do not parse a field that the user does not want parsed
                 if (field.isAnnotationPresent(DoNotSerialize.class))
                     continue;
@@ -45,12 +48,15 @@ public class DSON {
                 //Parses the object the field contains
                 String value = getValue(field.get(o));
                 result.append(fieldName).append(":").append(value).append(",");
+                success++;
             }
             //Removes the last comma
             //Why? It is not that easy to find out if the current field will be the last one, due to the annotations and publicity check
             //Sure it can be precalculated, but this is the most convenient way
             //Another approach is to add all the fields to an arraylist before printing to the stringbuilder
-            result.deleteCharAt(result.length()-1);
+            if (success > 0) {
+                result.deleteCharAt(result.length() - 1);
+            }
         }
         catch(Exception e){
             e.printStackTrace();
@@ -205,6 +211,14 @@ public class DSON {
         private Scanner queryParser;
 
         /**
+         * Constructs an empty DSON object. This constructor is intended for internal use.
+         */
+        private DSONObject(){
+            object = null;
+            objectClass = null;
+        }
+
+        /**
          * Constructs a DSON object from an object.
          * When the DSON object is parsed, the original object's fields will be updated with new values.
          * @param o the object to be parsed
@@ -212,7 +226,10 @@ public class DSON {
         private DSONObject(Object o){
             this.object = o;
             this.objectClass = o.getClass();
-            for (Field field : this.objectClass.getFields()){
+            for (Field field : this.objectClass.getDeclaredFields()){
+                if (!field.trySetAccessible()){
+                    continue;
+                }
                 //This will NPE if the pesky json attempts to access the field
                 if (field.isAnnotationPresent(DoNotSerialize.class))
                     continue;
@@ -902,7 +919,7 @@ public class DSON {
          * If an assert fails or an exception is thrown, it means that a test has failed.
          */
         public static void main(String[] args) throws DSONException {
-            DSONObject test = new DSONObject("");
+            DSONObject test = new DSONObject();
 
             //parseInt
             String integerTest = "1024";
