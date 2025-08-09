@@ -1,3 +1,5 @@
+package DSON;
+
 import TestSuite.*;
 
 import java.lang.reflect.*;
@@ -5,7 +7,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * A utility class containing all DSON functionality.
+ * A utility class containing all DSON.DSON functionality.
  * @author MaximusHartanto
  */
 public class DSON {
@@ -14,9 +16,9 @@ public class DSON {
      * Serializes an object into standard-JSON format.
      * This function inspects the object's fields and collates it into a JSON string.
      * <br>
-     * Do note that non-public fields and fields marked with {@code @DoNotSerialize} will not be included.
+     * Do note that non-public fields and fields marked with {@code @DSON.DoNotSerialize} will not be included.
      * <br>
-     * Do also note that fields mraked with the {@code Rename} annotation will be renamed to the user-provided value.
+     * Do also note that fields mraked with the {@code DSON.Rename} annotation will be renamed to the user-provided value.
      * @implNote all fields will be lowercased by default. For example, if you have a field named "intList", it will be reflected as "intlist" in the JSON string.
      * @param o the object to be serialized into JSON.
      * @return the JSON-formatted object in a single-line string. Use the {@code prettyPrint()} function to print it properly formatted.
@@ -189,16 +191,16 @@ public class DSON {
     }
 
     /**
-     * Exceptions related to DSON serialization.
+     * Exceptions related to DSON.DSON serialization.
      * @author MaximusHartanto
      */
     public static class DSONException extends Exception{
     }
 
     /**
-     * An object which contains JSON deserialization methods. DSON objects are constructed using DSON's {@code get()} function.
-     * Fields which are non-private and fields that are marked with the {@code DoNotSerialize} annotation will not be deserialized.
-     * Additionally, fields with the {@code Rename} annotation will accept a different field name from JSON.
+     * An object which contains JSON deserialization methods. DSON.DSON objects are constructed using DSON.DSON's {@code get()} function.
+     * Fields which are non-private and fields that are marked with the {@code DSON.DoNotSerialize} annotation will not be deserialized.
+     * Additionally, fields with the {@code DSON.Rename} annotation will accept a different field name from JSON.
      * @author MaximusHartanto
      */
     public static class DSONObject {
@@ -211,7 +213,7 @@ public class DSON {
         private Scanner queryParser;
 
         /**
-         * Constructs an empty DSON object. This constructor is intended for internal use.
+         * Constructs an empty DSON.DSON object. This constructor is intended for internal use.
          */
         private DSONObject(){
             object = null;
@@ -219,8 +221,8 @@ public class DSON {
         }
 
         /**
-         * Constructs a DSON object from an object.
-         * When the DSON object is parsed, the original object's fields will be updated with new values.
+         * Constructs a DSON.DSON object from an object.
+         * When the DSON.DSON object is parsed, the original object's fields will be updated with new values.
          * @param o the object to be parsed
          */
         private DSONObject(Object o){
@@ -306,7 +308,7 @@ public class DSON {
         }
 
         /**
-         * Deserializes a JSON string into this DSON object.
+         * Deserializes a JSON string into this DSON.DSON object.
          * This populates the object's fields with data retrieved from JSON.
          * @implNote Do note that all object field names will be lowercased by default, the lowercase name will be used to search for fields within the JSON.
          * For example, if you have a field called theNumberThree, the entry with the name "thenumberthree: ..." will be associated with that field.
@@ -915,7 +917,7 @@ public class DSON {
         }
 
         /**
-         * Tests the DSON parser.
+         * Tests the DSON.DSON parser.
          * If an assert fails or an exception is thrown, it means that a test has failed.
          */
         public static void main(String[] args) throws DSONException {
