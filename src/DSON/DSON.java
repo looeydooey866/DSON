@@ -97,11 +97,10 @@ public class DSON {
                 result.append(getValue(Array.get(o, up)));
                 if (down != 1)
                     result.append(",");
-                else
-                    result.append("]");
                 up++;
                 down--;
             }
+            result.append("]");
             return result.toString();
         } else if (o instanceof List<?> ls){
             //Yes, these two cases boil down to recursive calls. This is done for simplicity's sake
@@ -208,8 +207,8 @@ public class DSON {
         private final Class<?> objectClass;
         private final List<Field> classFields = new ArrayList<>();
         private final Map<String,Field> fieldGetter = new HashMap<>();
-        private final Map<Class<?>,Class<?>> typeGetter = new HashMap<>();
-        private final Map<Class<?>,Class<?>[]> mapTypeGetter = new HashMap<>();
+        private final Map<Field,Class<?>> typeGetter = new HashMap<>();
+        private final Map<Field,Class<?>[]> mapTypeGetter = new HashMap<>();
         private Scanner queryParser;
 
         /**
@@ -262,7 +261,7 @@ public class DSON {
                     //Yea don't mind this...
                     ParameterizedType ptype = (ParameterizedType) field.getGenericType();
                     Class<?> genericClass = (Class<?>) ptype.getActualTypeArguments()[0];
-                    typeGetter.put(fieldClass, genericClass);
+                    typeGetter.put(field, genericClass);
                 }
             }
         }
@@ -277,7 +276,7 @@ public class DSON {
                     Type[] types = ptype.getActualTypeArguments();
                     Class<?> keyClass = (Class<?>) types[0];
                     Class<?> valueClass = (Class<?>) types[1];
-                    mapTypeGetter.put(fieldClass, new Class<?>[]{keyClass,valueClass});
+                    mapTypeGetter.put(field, new Class<?>[]{keyClass,valueClass});
                 }
             }
         }
@@ -668,7 +667,7 @@ public class DSON {
             List<Object> objects = new ArrayList<>();
             char lookahead = peekOne();
             while (lookahead != ']'){
-                objects.add(parseObject(underlyingType));
+                objects.add(parseObject(underlyingType, null));
                 lookahead = peekOne();
                 if (lookahead != ']') {
                     expect(',');
@@ -697,13 +696,13 @@ public class DSON {
          * @return a List object, containing the values from the JSON.
          * @throws DSONException if something has gone wrong during the parsing process, an exception will be thrown.
          */
-        private List<?> parseList(Class<?> listClass) throws DSONException {
-            Class<?> underlyingClass = typeGetter.get(listClass);
+        private List<?> parseList(Class<?> listClass, Field field) throws DSONException {
+            Class<?> underlyingClass = typeGetter.get(field);
             expect('[');
             char lookahead = peekOne();
             List<Object> result = new ArrayList<>();
             while (lookahead != ']'){
-                Object element = parseObject(underlyingClass);
+                Object element = parseObject(underlyingClass, null);
                 result.add(element);
                 lookahead = peekOne();
                 if (lookahead != ']'){
@@ -730,13 +729,13 @@ public class DSON {
          * @return a Set object, containing the parsed data from JSON.
          * @throws DSONException if something has gone wrong during the parsing process, an exception will be thrown.
          */
-        private Set<?> parseSet(Class<?> setClass) throws DSONException{
-            Class<?> underlyingClass = typeGetter.get(setClass);
+        private Set<?> parseSet(Class<?> setClass, Field field) throws DSONException{
+            Class<?> underlyingClass = typeGetter.get(field);
             expect('[');
             char lookahead = peekOne();
             Set<Object> result = new HashSet<>();
             while (lookahead != ']'){
-                Object element = parseObject(underlyingClass);
+                Object element = parseObject(underlyingClass, null);
                 result.add(element);
                 lookahead = peekOne();
                 if (lookahead != ']'){
@@ -763,8 +762,8 @@ public class DSON {
          * @return the Map object with data parsed from the JSON.
          * @throws DSONException if something has gone wrong during the parsing process, an exception will be thrown.
          */
-        private Map<?,?> parseMap(Class<?> mapClass) throws DSONException{
-            Class<?>[] mapArguments = mapTypeGetter.get(mapClass);
+        private Map<?,?> parseMap(Class<?> mapClass, Field field) throws DSONException{
+            Class<?>[] mapArguments = mapTypeGetter.get(field);
             Class<?> keyClass = mapArguments[0];
             Class<?> valueClass = mapArguments[1];
             expect('[');
@@ -788,10 +787,10 @@ public class DSON {
                 }
                 expect(':');
                 if (firstArgument.toString().equals("key")){
-                    key = parseObject(keyClass);
+                    key = parseObject(keyClass, null);
                 }
                 else if (firstArgument.toString().equals("value")){
-                    value = parseObject(valueClass);
+                    value = parseObject(valueClass, null);
                 }
                 expect(',');
                 lookahead = peekOne();
@@ -807,10 +806,10 @@ public class DSON {
                 }
                 expect(':');
                 if (secondArgument.toString().equals("key")){
-                    key = parseObject(keyClass);
+                    key = parseObject(keyClass, null);
                 }
                 else if (secondArgument.toString().equals("value")){
-                    value = parseObject(valueClass);
+                    value = parseObject(valueClass, null);
                 }
                 expect('}');
                 lookahead = peekOne();
@@ -853,7 +852,7 @@ public class DSON {
          * @return an Object, which is the parsed value of the class.
          * @throws DSONException if something has gone wrong during the parsing process, an exception will be thrown.
          */
-        private Object parseObject(Class<?> objectClass) throws DSONException{
+        private Object parseObject(Class<?> objectClass, Field field) throws DSONException{
             if (isPrimitive(wrapperToPrimitive(objectClass))){
                 return parsePrimitive(primitiveToWrapper(objectClass));
             }
@@ -861,13 +860,22 @@ public class DSON {
                 return parseTypicalArray(objectClass);
             }
             else if (isList(objectClass)){
-                return parseList(objectClass);
+                if (field == null){
+                    throw new DSONException();
+                }
+                return parseList(objectClass, field);
             }
             else if (isSet(objectClass)){
-                return parseSet(objectClass);
+                if (field == null){
+                    throw new DSONException();
+                }
+                return parseSet(objectClass, field);
             }
             else if (isMap(objectClass)){
-                return parseMap(objectClass);
+                if (field == null){
+                    throw new DSONException();
+                }
+                return parseMap(objectClass, field);
             }
             else{
                 Object innerObject = getClassInstance(objectClass);
@@ -908,7 +916,7 @@ public class DSON {
 
             Field field = fieldGetter.get(fieldName.toString());
             Class<?> fieldClass = field.getType();
-            Object value = parseObject(fieldClass);
+            Object value = parseObject(fieldClass, field);
             try {
                 field.set(object, value);
             } catch (Exception e){
