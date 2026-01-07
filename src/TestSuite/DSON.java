@@ -1,6 +1,4 @@
-package DSON;
-
-import TestSuite.*;
+package TestSuite;
 
 import java.lang.reflect.*;
 import java.util.*;
@@ -11,6 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author MaximusHartanto
  */
 public class DSON {
+    public static void main(String[] args) throws DSONException { DSONObject.main(args); }
     /**
      * Serializes an object into standard-JSON format.
      * This function inspects the object's fields and collates it into a JSON string.
@@ -921,6 +920,166 @@ public class DSON {
             } catch (Exception e){
                 throw new DSONException();
             }
+        }
+
+        /**
+         * Tests the DSON.DSON parser.
+         * If an assert fails or an exception is thrown, it means that a test has failed.
+         */
+        public static void main(String[] args) throws DSONException {
+            DSONObject test = new DSONObject();
+
+            //parseInt
+            String integerTest = "1024";
+            int integerResult = 1024;
+            test.setParser(integerTest);
+            assert test.parseInt() == integerResult;
+
+            //parseDouble
+            String doubleTest = "1024.2048";
+            double doubleResult = 1024.2048;
+            test.setParser(doubleTest);
+            assert Math.abs(test.parseDouble() - doubleResult) <= 0.0000001;
+
+            //parseFloat
+            int floatTestCount = 5;
+            String[] floatTests = new String[]{"3", "3f", "3.f", ".1f","0.000123"};
+            float[] floatResults = new float[]{3.0f, 3.0f, 3.0f, 0.1f, 0.000123f};
+            for (int i = 0; i < floatTestCount; i++){
+                test.setParser(floatTests[i]);
+                assert Math.abs(test.parseFloat() - floatResults[i]) <= 0.000001f;
+            }
+
+            //parseBoolean
+            int booleanTestCount = 2;
+            String[] booleanTests = new String[]{"true,", "false}}"};
+            boolean[] booleanResults = new boolean[]{true, false};
+            for (int i = 0; i < booleanTestCount; i++){
+                test.setParser(booleanTests[i]);
+                assert test.parseBoolean() == booleanResults[i];
+            }
+
+            //Test on primitive fields
+            TestObject testObject1 = new TestObject();
+            String testJSON1 = "{name:\"jimbob\",age:255}";
+            DSONObject obj = new DSONObject(testObject1);
+            obj.setParser(testJSON1);
+            obj.parseJSON();
+            String json = serialize(testObject1);
+            assert json.equals(testJSON1);
+
+            //Test on simple arrays
+            TestObject2 testObject2 = new TestObject2();
+            String testJSON2 = """
+                    {
+                        numbers: [1, 2, 3, 5],
+                        strings: ["jim", "bob", "bruhman"]
+                    }
+                    """;
+            DSONObject obj2 = new DSONObject(testObject2);
+            obj2.setParser(testJSON2);
+            obj2.parseJSON();
+            String json2 = serialize(testObject2);
+            assert fixFormat(testJSON2).equals(json2);
+
+            //Test on simple array of ojbects
+            TestObject3 testObject3 = new TestObject3();
+            String testJSON3 = """
+                    {
+                        apples: [
+                            {
+                                weight: 3,
+                                tasty: true
+                            },
+                            {
+                                weight:100,
+                                tasty: false
+                            },
+                            {
+                                weight: 40,
+                                tasty: true
+                            }
+                        ]
+                    }
+                    """;
+            DSONObject obj3 = new DSONObject(testObject3);
+            obj3.setParser(testJSON3);
+            obj3.parseJSON();
+            String json3 = serialize(testObject3);
+            assert fixFormat(testJSON3).equals(json3);
+
+            //Test on lists and sets
+            TestObject4 testObject4 = new TestObject4();
+            String testJSON4 = """
+                    {
+                        apples: [
+                            {
+                                weight: 3,
+                                tasty: true
+                            },
+                            {
+                                weight:   100,
+                                tasty: false
+                            },
+                            {
+                                weight: 40,
+                                tasty: true
+                            }
+                        ],
+                        numbers: [1, 2, 3, 4, 5]
+                    }
+                    """;
+            DSONObject obj4 = new DSONObject(testObject4);
+            obj4.setParser(testJSON4);
+            obj4.parseJSON();
+            String json4 = serialize(testObject4);
+            assert fixFormat(testJSON4).equals(json4);
+
+            TestObject5 testObject5 = new TestObject5();
+            String testJSON5 = """
+                    {
+                        applemap: [
+                        {
+                            key: "HEAVY_APPLE_1",
+                            value: {
+                                weight: 100,
+                                tasty: false
+                            }
+                        },
+                        {
+                            key: "LIGHT_APPLE_1",
+                            value: {
+                                weight: 1,
+                                tasty: true
+                            }
+                        },
+                        {
+                            key: "LIGHT_APPLE_2",
+                            value: {
+                                weight: 3,
+                                tasty: false
+                            }
+                        }]
+                    }
+                    """;
+            DSONObject obj5 = new DSONObject(testObject5);
+            obj5.setParser(testJSON5);
+            obj5.parseJSON();
+            String json5 = serialize(testObject5);
+            assert fixFormat(testJSON5).equals(json5);
+
+            //Testing " on field names, which is allowed in JSON
+            TestObject testObject6 = new TestObject();
+            String testJSON6 = "{\"name\":\"jimbob\",\"age\":255}";
+            DSONObject obj6 = new DSONObject(testObject6);
+            obj6.setParser(testJSON6);
+            obj6.parseJSON();
+            String json6 = serialize(testObject6);
+            assert json6.equals(testJSON1);
+
+            System.out.println("All tests passed!");
+
+            //TODO add tests for rename btw
         }
     }
 }
