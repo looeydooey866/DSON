@@ -1,13 +1,15 @@
+package DSON;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * An annotation to be added to object fields, to change its associated name for DamnSON parsing.
+ * An annotation to be added to object fields, to change its associated name for DSON.DSON parsing.
  * To use, simply add the annotation as follows:
  * <br><br>
- * {@code @Rename("number")}
+ * {@code @DSON.Rename("number")}
  * <br>
  * {@code public int N;}
  * <br><br>

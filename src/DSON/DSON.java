@@ -1,3 +1,5 @@
+package DSON;
+
 import TestSuite.*;
 
 import java.lang.reflect.*;
@@ -5,34 +7,36 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * A utility class containing all DamnSON functionality.
+ * A utility class containing all DSON.DSON functionality.
  * @author MaximusHartanto
  */
-public class DamnSON {
+public class DSON {
     /**
      * Serializes an object into standard-JSON format.
      * This function inspects the object's fields and collates it into a JSON string.
      * <br>
-     * Do note that non-public fields and fields marked with {@code @DoNotSerialize} will not be included.
+     * Do note that non-public fields and fields marked with {@code @DSON.DoNotSerialize} will not be included.
      * <br>
-     * Do also note that fields mraked with the {@code Rename} annotation will be renamed to the user-provided value.
+     * Do also note that fields mraked with the {@code DSON.Rename} annotation will be renamed to the user-provided value.
      * @implNote all fields will be lowercased by default. For example, if you have a field named "intList", it will be reflected as "intlist" in the JSON string.
      * @param o the object to be serialized into JSON.
      * @return the JSON-formatted object in a single-line string. Use the {@code prettyPrint()} function to print it properly formatted.
-     * @throws DamnSONException if an exception is thrown, something has gone wrong during the serialization process.
+     * @throws DSONException if an exception is thrown, something has gone wrong during the serialization process.
      * @author MaximusHartanto
      */
-    public static String serialize(Object o) throws DamnSONException{
+    public static String serialize(Object o) throws DSONException{
         StringBuilder result = new StringBuilder();
         result.append("{");
         try {
             Class<?> objectClass = o.getClass();
             //Gets metadata of all the fields in the object, including its name
+            int success = 0;
             Field[] fields = objectClass.getDeclaredFields();
             for (Field field : fields){
-                //Parsing a non-public field is not allowed
-                if (!Modifier.isPublic(field.getModifiers()))
+                //Bypassing privacy
+                if (!field.trySetAccessible()){
                     continue;
+                }
                 //Do not parse a field that the user does not want parsed
                 if (field.isAnnotationPresent(DoNotSerialize.class))
                     continue;
@@ -45,16 +49,19 @@ public class DamnSON {
                 //Parses the object the field contains
                 String value = getValue(field.get(o));
                 result.append(fieldName).append(":").append(value).append(",");
+                success++;
             }
             //Removes the last comma
             //Why? It is not that easy to find out if the current field will be the last one, due to the annotations and publicity check
             //Sure it can be precalculated, but this is the most convenient way
             //Another approach is to add all the fields to an arraylist before printing to the stringbuilder
-            result.deleteCharAt(result.length()-1);
+            if (success > 0) {
+                result.deleteCharAt(result.length() - 1);
+            }
         }
         catch(Exception e){
             e.printStackTrace();
-            throw new DamnSONException();
+            throw new DSONException();
         }
         result.append("}");
         return result.toString();
@@ -68,10 +75,10 @@ public class DamnSON {
      * Note - {@code Arrays}, {@code Lists} and {@code Sets} will all be serialized into comma-separated []-array form, and {@code Maps} will be serialized into a list of {@code key: value} objects.
      * @param o the object of which the value is stored.
      * @return a string containing the object's value in valid JSON form.
-     * @throws DamnSONException something has went wrong during the serialization process.
+     * @throws DSONException something has went wrong during the serialization process.
      * @author MaximusHartanto
      */
-    public static String getValue(Object o) throws DamnSONException {
+    public static String getValue(Object o) throws DSONException {
         //Check if primitive type
         Class<?>[] primitiveTypes = {Integer.class, Double.class, Float.class, Boolean.class};
         if (Arrays.stream(primitiveTypes).anyMatch(primitive -> primitive.isInstance(o))) {
@@ -89,11 +96,10 @@ public class DamnSON {
                 result.append(getValue(Array.get(o, up)));
                 if (down != 1)
                     result.append(",");
-                else
-                    result.append("]");
                 up++;
                 down--;
             }
+            result.append("]");
             return result.toString();
         } else if (o instanceof List<?> ls){
             //Yes, these two cases boil down to recursive calls. This is done for simplicity's sake
@@ -113,7 +119,7 @@ public class DamnSON {
                     if (down.getAndDecrement() != 1){
                         result.append(',');
                     }
-                } catch (DamnSONException e) {
+                } catch (DSONException e) {
                     throw new RuntimeException();
                 }
             });
@@ -173,46 +179,57 @@ public class DamnSON {
     }
 
     /**
-     * Constructs a new DamnSONObject from an object o. A DamnSONObject is used for deserializing JSON into Java objects.
-     * @param o the object to be converted into a DamnSONObject.
-     * @return a DamnSONObject.
+     * Constructs a new DSONObject from an object o. A DSONObject is used for deserializing JSON into Java objects.
+     * @param o the object to be converted into a DSONObject.
+     * @return a DSONObject.
      * @author MaximusHartanto
      */
-    public static DamnSONObject get(Object o){
-        return new DamnSONObject(o);
+    public static DSONObject get(Object o){
+        return new DSONObject(o);
     }
 
     /**
-     * Exceptions related to DamnSON serialization.
+     * Exceptions related to DSON.DSON serialization.
      * @author MaximusHartanto
      */
-    public static class DamnSONException extends Exception{
+    public static class DSONException extends Exception{
     }
 
     /**
-     * An object which contains JSON deserialization methods. DamnSON objects are constructed using DamnSON's {@code get()} function.
-     * Fields which are non-private and fields that are marked with the {@code DoNotSerialize} annotation will not be deserialized.
-     * Additionally, fields with the {@code Rename} annotation will accept a different field name from JSON.
+     * An object which contains JSON deserialization methods. DSON.DSON objects are constructed using DSON.DSON's {@code get()} function.
+     * Fields which are non-private and fields that are marked with the {@code DSON.DoNotSerialize} annotation will not be deserialized.
+     * Additionally, fields with the {@code DSON.Rename} annotation will accept a different field name from JSON.
      * @author MaximusHartanto
      */
-    public static class DamnSONObject {
+    public static class DSONObject {
         private final Object object;
         private final Class<?> objectClass;
         private final List<Field> classFields = new ArrayList<>();
         private final Map<String,Field> fieldGetter = new HashMap<>();
-        private final Map<Class<?>,Class<?>> typeGetter = new HashMap<>();
-        private final Map<Class<?>,Class<?>[]> mapTypeGetter = new HashMap<>();
+        private final Map<Field,Class<?>> typeGetter = new HashMap<>();
+        private final Map<Field,Class<?>[]> mapTypeGetter = new HashMap<>();
         private Scanner queryParser;
 
         /**
-         * Constructs a DamnSON object from an object.
-         * When the DamnSON object is parsed, the original object's fields will be updated with new values.
+         * Constructs an empty DSON.DSON object. This constructor is intended for internal use.
+         */
+        private DSONObject(){
+            object = null;
+            objectClass = null;
+        }
+
+        /**
+         * Constructs a DSON.DSON object from an object.
+         * When the DSON.DSON object is parsed, the original object's fields will be updated with new values.
          * @param o the object to be parsed
          */
-        private DamnSONObject(Object o){
+        private DSONObject(Object o){
             this.object = o;
             this.objectClass = o.getClass();
-            for (Field field : this.objectClass.getFields()){
+            for (Field field : this.objectClass.getDeclaredFields()){
+                if (!field.trySetAccessible()){
+                    continue;
+                }
                 //This will NPE if the pesky json attempts to access the field
                 if (field.isAnnotationPresent(DoNotSerialize.class))
                     continue;
@@ -243,7 +260,7 @@ public class DamnSON {
                     //Yea don't mind this...
                     ParameterizedType ptype = (ParameterizedType) field.getGenericType();
                     Class<?> genericClass = (Class<?>) ptype.getActualTypeArguments()[0];
-                    typeGetter.put(fieldClass, genericClass);
+                    typeGetter.put(field, genericClass);
                 }
             }
         }
@@ -258,7 +275,7 @@ public class DamnSON {
                     Type[] types = ptype.getActualTypeArguments();
                     Class<?> keyClass = (Class<?>) types[0];
                     Class<?> valueClass = (Class<?>) types[1];
-                    mapTypeGetter.put(fieldClass, new Class<?>[]{keyClass,valueClass});
+                    mapTypeGetter.put(field, new Class<?>[]{keyClass,valueClass});
                 }
             }
         }
@@ -289,15 +306,15 @@ public class DamnSON {
         }
 
         /**
-         * Deserializes a JSON string into this DamnSON object.
+         * Deserializes a JSON string into this DSON.DSON object.
          * This populates the object's fields with data retrieved from JSON.
          * @implNote Do note that all object field names will be lowercased by default, the lowercase name will be used to search for fields within the JSON.
          * For example, if you have a field called theNumberThree, the entry with the name "thenumberthree: ..." will be associated with that field.
          * @param JSON the JSON string to be deserialized.
          * The string will be automatically formatted and no removal of whitespace/newlines is necessary.
-         * @throws DamnSONException an error has occured during deserialization.
+         * @throws DSONException an error has occured during deserialization.
          */
-        public void parse(String JSON) throws DamnSONException{
+        public void parse(String JSON) throws DSONException{
             setParser(JSON);
             parseJSON();
         }
@@ -348,11 +365,11 @@ public class DamnSON {
          * <br><br>
          * Do also note that this function checks if the parser has no more tokens to read.
          * @param c the character to be expected to be the next token.
-         * @throws DamnSONException this means that the next character does not match with the intended one.
+         * @throws DSONException this means that the next character does not match with the intended one.
          */
-        private void expect(char c) throws DamnSONException{
+        private void expect(char c) throws DSONException{
             if (endOfLine() || queryParser.next().charAt(0) != c)
-                throw new DamnSONException();
+                throw new DSONException();
         }
 
         /**
@@ -471,9 +488,9 @@ public class DamnSON {
         /**
          * Parses a boolean from the current parser position. Do note that Json is case-sensitive. This function will only accept 'true' and 'false' as boolean values, and they must be unwrapped in quotes.
          * @return the boolean value parsed.
-         * @throws DamnSONException if the input format is invalid, an exception will be thrown.
+         * @throws DSONException if the input format is invalid, an exception will be thrown.
          */
-        private boolean parseBoolean() throws DamnSONException {
+        private boolean parseBoolean() throws DSONException {
             StringBuilder result = new StringBuilder();
             char next = peekOne();
             while (next >= 'a' && next <= 'z'){
@@ -488,15 +505,15 @@ public class DamnSON {
             if (value.equals("false")){
                 return false;
             }
-            throw new DamnSONException();
+            throw new DSONException();
         }
 
         /**
          * Parses a string from the current parsing position. Strings should be wrapped in {@code \"quotes\"}.
          * @return the parsed String value.
-         * @throws DamnSONException if the format is invalid, an exception will be thrown.
+         * @throws DSONException if the format is invalid, an exception will be thrown.
          */
-        private String parseString() throws DamnSONException{
+        private String parseString() throws DSONException{
             StringBuilder result = new StringBuilder();
             expect('\"');
             while (peekOne() != '\"'){
@@ -509,9 +526,9 @@ public class DamnSON {
         /**
          * Parses a singular character from the current parsing position.  Characters should be wrapped in {@code \'quotes\'}.
          * @return the parsed character value.
-         * @throws DamnSONException if the format is invalid, an exception will be thrown.
+         * @throws DSONException if the format is invalid, an exception will be thrown.
          */
-        private char parseChar() throws DamnSONException{
+        private char parseChar() throws DSONException{
             expect('\'');
             char result = nextChar();
             expect('\'');
@@ -604,9 +621,9 @@ public class DamnSON {
          * Additionally, this function checks for the primitive class's wrapper class and pure primitive classes is not supported.
          * @param primitiveClass the wrapper class to be parsed.
          * @return an Object with the parsed value.
-         * @throws DamnSONException If something has gone wrong during the parsing process, an exception will be thrown.
+         * @throws DSONException If something has gone wrong during the parsing process, an exception will be thrown.
          */
-        private Object parsePrimitive(Class<?> primitiveClass) throws DamnSONException{
+        private Object parsePrimitive(Class<?> primitiveClass) throws DSONException{
             if (primitiveClass == Integer.class){
                 return parseInt();
             }
@@ -641,15 +658,15 @@ public class DamnSON {
          * Parses an array in the current parsing position. This function expects an array starting and ending with square brackets, and separated with commas. An empty array is allowed.
          * @param arrayClass the class of the array to be parsed.
          * @return an Object, which is the parsed array value.
-         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         * @throws DSONException if something has gone wrong during the parsing process, an exception will be thrown.
          */
-        private Object parseTypicalArray(Class<?> arrayClass) throws DamnSONException {
+        private Object parseTypicalArray(Class<?> arrayClass) throws DSONException {
             expect('[');
             Class<?> underlyingType = arrayClass.getComponentType();
             List<Object> objects = new ArrayList<>();
             char lookahead = peekOne();
             while (lookahead != ']'){
-                objects.add(parseObject(underlyingType));
+                objects.add(parseObject(underlyingType, null));
                 lookahead = peekOne();
                 if (lookahead != ']') {
                     expect(',');
@@ -676,15 +693,15 @@ public class DamnSON {
          * Parses a list from the current parsing position. The type will be deduced from the class object. Square brackets and separator commas are expected during parsing.
          * @param listClass the class of the object to be parsed.
          * @return a List object, containing the values from the JSON.
-         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         * @throws DSONException if something has gone wrong during the parsing process, an exception will be thrown.
          */
-        private List<?> parseList(Class<?> listClass) throws DamnSONException {
-            Class<?> underlyingClass = typeGetter.get(listClass);
+        private List<?> parseList(Class<?> listClass, Field field) throws DSONException {
+            Class<?> underlyingClass = typeGetter.get(field);
             expect('[');
             char lookahead = peekOne();
             List<Object> result = new ArrayList<>();
             while (lookahead != ']'){
-                Object element = parseObject(underlyingClass);
+                Object element = parseObject(underlyingClass, null);
                 result.add(element);
                 lookahead = peekOne();
                 if (lookahead != ']'){
@@ -709,15 +726,15 @@ public class DamnSON {
          * Parses a set class from the current parsing position. Do note that sets have the same syntax as arrays, e.g. square brackets and commas. The parsed type will be deduced from the class object.
          * @param setClass the class of the object to be parsed.
          * @return a Set object, containing the parsed data from JSON.
-         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         * @throws DSONException if something has gone wrong during the parsing process, an exception will be thrown.
          */
-        private Set<?> parseSet(Class<?> setClass) throws DamnSONException{
-            Class<?> underlyingClass = typeGetter.get(setClass);
+        private Set<?> parseSet(Class<?> setClass, Field field) throws DSONException{
+            Class<?> underlyingClass = typeGetter.get(field);
             expect('[');
             char lookahead = peekOne();
             Set<Object> result = new HashSet<>();
             while (lookahead != ']'){
-                Object element = parseObject(underlyingClass);
+                Object element = parseObject(underlyingClass, null);
                 result.add(element);
                 lookahead = peekOne();
                 if (lookahead != ']'){
@@ -742,10 +759,10 @@ public class DamnSON {
          * Parses a Map from the current parsing position. Maps are lists of Entry objects, and entry objects contain a "key" field and a "value" field. The type will be automatically deduced from the class passed into the function.
          * @param mapClass the class of the map to be parsed. Type metadata will be deduced from here.
          * @return the Map object with data parsed from the JSON.
-         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         * @throws DSONException if something has gone wrong during the parsing process, an exception will be thrown.
          */
-        private Map<?,?> parseMap(Class<?> mapClass) throws DamnSONException{
-            Class<?>[] mapArguments = mapTypeGetter.get(mapClass);
+        private Map<?,?> parseMap(Class<?> mapClass, Field field) throws DSONException{
+            Class<?>[] mapArguments = mapTypeGetter.get(field);
             Class<?> keyClass = mapArguments[0];
             Class<?> valueClass = mapArguments[1];
             expect('[');
@@ -769,10 +786,10 @@ public class DamnSON {
                 }
                 expect(':');
                 if (firstArgument.toString().equals("key")){
-                    key = parseObject(keyClass);
+                    key = parseObject(keyClass, null);
                 }
                 else if (firstArgument.toString().equals("value")){
-                    value = parseObject(valueClass);
+                    value = parseObject(valueClass, null);
                 }
                 expect(',');
                 lookahead = peekOne();
@@ -788,10 +805,10 @@ public class DamnSON {
                 }
                 expect(':');
                 if (secondArgument.toString().equals("key")){
-                    key = parseObject(keyClass);
+                    key = parseObject(keyClass, null);
                 }
                 else if (secondArgument.toString().equals("value")){
-                    value = parseObject(valueClass);
+                    value = parseObject(valueClass, null);
                 }
                 expect('}');
                 lookahead = peekOne();
@@ -809,9 +826,9 @@ public class DamnSON {
          * Gets an instance of a Class, e.g. invokes its no-arg constructor and gets the object created by it. The class must have a no-arg constructor defined for inner nested objects.
          * @param objectClass the class of the object to be instantiated.
          * @return the instantiated object.
-         * @throws DamnSONException if the object does not have a suitable constructor, an exception will be thrown.
+         * @throws DSONException if the object does not have a suitable constructor, an exception will be thrown.
          */
-        private static Object getClassInstance(Class<?> objectClass) throws DamnSONException {
+        private static Object getClassInstance(Class<?> objectClass) throws DSONException {
             try {
                 Constructor<?>[] constructors = objectClass.getConstructors();
                 for (Constructor<?> c : constructors) {
@@ -821,9 +838,9 @@ public class DamnSON {
                 }
             }
             catch (Exception e){
-                throw new DamnSONException();
+                throw new DSONException();
             }
-            throw new DamnSONException();
+            throw new DSONException();
         }
 
         /**
@@ -832,9 +849,9 @@ public class DamnSON {
          * This function can also be called recursively in the case of object Lists or Arrays, as well as nested objects within classes.
          * @param objectClass the class to be parsed.
          * @return an Object, which is the parsed value of the class.
-         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         * @throws DSONException if something has gone wrong during the parsing process, an exception will be thrown.
          */
-        private Object parseObject(Class<?> objectClass) throws DamnSONException{
+        private Object parseObject(Class<?> objectClass, Field field) throws DSONException{
             if (isPrimitive(wrapperToPrimitive(objectClass))){
                 return parsePrimitive(primitiveToWrapper(objectClass));
             }
@@ -842,17 +859,26 @@ public class DamnSON {
                 return parseTypicalArray(objectClass);
             }
             else if (isList(objectClass)){
-                return parseList(objectClass);
+                if (field == null){
+                    throw new DSONException();
+                }
+                return parseList(objectClass, field);
             }
             else if (isSet(objectClass)){
-                return parseSet(objectClass);
+                if (field == null){
+                    throw new DSONException();
+                }
+                return parseSet(objectClass, field);
             }
             else if (isMap(objectClass)){
-                return parseMap(objectClass);
+                if (field == null){
+                    throw new DSONException();
+                }
+                return parseMap(objectClass, field);
             }
             else{
                 Object innerObject = getClassInstance(objectClass);
-                DamnSONObject dson = new DamnSONObject(innerObject);
+                DSONObject dson = new DSONObject(innerObject);
                 dson.overrideParser(queryParser);
                 dson.parseJSON();
                 return innerObject;
@@ -861,9 +887,9 @@ public class DamnSON {
 
         /**
          * Parses a JSON string. This function is the entry point for parsing a JSON.
-         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         * @throws DSONException if something has gone wrong during the parsing process, an exception will be thrown.
          */
-        private void parseJSON() throws DamnSONException{
+        private void parseJSON() throws DSONException{
             expect('{');
             while (true){
                 parseField();
@@ -876,9 +902,9 @@ public class DamnSON {
 
         /**
          * Parses a field from the current parsing position. A field in JSON is a key: value pair, separated by commas. However, there cannot be a comma after the last field.
-         * @throws DamnSONException if something has gone wrong during the parsing process, an exception will be thrown.
+         * @throws DSONException if something has gone wrong during the parsing process, an exception will be thrown.
          */
-        private void parseField() throws DamnSONException{
+        private void parseField() throws DSONException{
             StringBuilder fieldName = new StringBuilder();
             option('\"');
             while (Character.isLetterOrDigit(peekOne())){
@@ -889,170 +915,12 @@ public class DamnSON {
 
             Field field = fieldGetter.get(fieldName.toString());
             Class<?> fieldClass = field.getType();
-            Object value = parseObject(fieldClass);
+            Object value = parseObject(fieldClass, field);
             try {
                 field.set(object, value);
             } catch (Exception e){
-                throw new DamnSONException();
+                throw new DSONException();
             }
-        }
-
-        /**
-         * Tests the DamnSON parser.
-         * If an assert fails or an exception is thrown, it means that a test has failed.
-         */
-        public static void main(String[] args) throws DamnSONException {
-            DamnSONObject test = new DamnSONObject("");
-
-            //parseInt
-            String integerTest = "1024";
-            int integerResult = 1024;
-            test.setParser(integerTest);
-            assert test.parseInt() == integerResult;
-
-            //parseDouble
-            String doubleTest = "1024.2048";
-            double doubleResult = 1024.2048;
-            test.setParser(doubleTest);
-            assert Math.abs(test.parseDouble() - doubleResult) <= 0.0000001;
-
-            //parseFloat
-            int floatTestCount = 5;
-            String[] floatTests = new String[]{"3", "3f", "3.f", ".1f","0.000123"};
-            float[] floatResults = new float[]{3.0f, 3.0f, 3.0f, 0.1f, 0.000123f};
-            for (int i = 0; i < floatTestCount; i++){
-                test.setParser(floatTests[i]);
-                assert Math.abs(test.parseFloat() - floatResults[i]) <= 0.000001f;
-            }
-
-            //parseBoolean
-            int booleanTestCount = 2;
-            String[] booleanTests = new String[]{"true,", "false}}"};
-            boolean[] booleanResults = new boolean[]{true, false};
-            for (int i = 0; i < booleanTestCount; i++){
-                test.setParser(booleanTests[i]);
-                assert test.parseBoolean() == booleanResults[i];
-            }
-
-            //Test on primitive fields
-            TestObject testObject1 = new TestObject();
-            String testJSON1 = "{name:\"jimbob\",age:255}";
-            DamnSONObject obj = new DamnSONObject(testObject1);
-            obj.setParser(testJSON1);
-            obj.parseJSON();
-            String json = serialize(testObject1);
-            assert json.equals(testJSON1);
-
-            //Test on simple arrays
-            TestObject2 testObject2 = new TestObject2();
-            String testJSON2 = """
-                    {
-                        numbers: [1, 2, 3, 5],
-                        strings: ["jim", "bob", "bruhman"]
-                    }
-                    """;
-            DamnSONObject obj2 = new DamnSONObject(testObject2);
-            obj2.setParser(testJSON2);
-            obj2.parseJSON();
-            String json2 = serialize(testObject2);
-            assert fixFormat(testJSON2).equals(json2);
-
-            //Test on simple array of ojbects
-            TestObject3 testObject3 = new TestObject3();
-            String testJSON3 = """
-                    {
-                        apples: [
-                            {
-                                weight: 3,
-                                tasty: true
-                            },
-                            {
-                                weight:100,
-                                tasty: false
-                            },
-                            {
-                                weight: 40,
-                                tasty: true
-                            }
-                        ]
-                    }
-                    """;
-            DamnSONObject obj3 = new DamnSONObject(testObject3);
-            obj3.setParser(testJSON3);
-            obj3.parseJSON();
-            String json3 = serialize(testObject3);
-            assert fixFormat(testJSON3).equals(json3);
-
-            //Test on lists and sets
-            TestObject4 testObject4 = new TestObject4();
-            String testJSON4 = """
-                    {
-                        apples: [
-                            {
-                                weight: 3,
-                                tasty: true
-                            },
-                            {
-                                weight:   100,
-                                tasty: false
-                            },
-                            {
-                                weight: 40,
-                                tasty: true
-                            }
-                        ],
-                        numbers: [1, 2, 3, 4, 5]
-                    }
-                    """;
-            DamnSONObject obj4 = new DamnSONObject(testObject4);
-            obj4.setParser(testJSON4);
-            obj4.parseJSON();
-            String json4 = serialize(testObject4);
-            assert fixFormat(testJSON4).equals(json4);
-
-            TestObject5 testObject5 = new TestObject5();
-            String testJSON5 = """
-                    {
-                        applemap: [
-                        {
-                            key: "HEAVY_APPLE_1",
-                            value: {
-                                weight: 100,
-                                tasty: false
-                            }
-                        },
-                        {
-                            key: "LIGHT_APPLE_1",
-                            value: {
-                                weight: 1,
-                                tasty: true
-                            }
-                        },
-                        {
-                            key: "LIGHT_APPLE_2",
-                            value: {
-                                weight: 3,
-                                tasty: false
-                            }
-                        }]
-                    }
-                    """;
-            DamnSONObject obj5 = new DamnSONObject(testObject5);
-            obj5.setParser(testJSON5);
-            obj5.parseJSON();
-            String json5 = serialize(testObject5);
-            assert fixFormat(testJSON5).equals(json5);
-
-            //Testing " on field names, which is allowed in JSON
-            TestObject testObject6 = new TestObject();
-            String testJSON6 = "{\"name\":\"jimbob\",\"age\":255}";
-            DamnSONObject obj6 = new DamnSONObject(testObject6);
-            obj6.setParser(testJSON6);
-            obj6.parseJSON();
-            String json6 = serialize(testObject6);
-            assert json6.equals(testJSON1);
-
-            //TODO add tests for rename btw
         }
     }
 }
