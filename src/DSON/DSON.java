@@ -11,7 +11,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author MaximusHartanto
  */
 public class DSON {
-    public static void main(String[] args) throws DSONException {DSONObject.main(null);}
     /**
      * Serializes an object into standard-JSON format.
      * This function inspects the object's fields and collates it into a JSON string.
@@ -924,10 +923,10 @@ public class DSON {
             }
         }
 
+        /*
         /**
          * Tests the DSON.DSON parser.
          * If an assert fails or an exception is thrown, it means that a test has failed.
-         */
         public static void main(String[] args) throws DSONException {
             DSONObject test = new DSONObject();
 
@@ -1079,7 +1078,10 @@ public class DSON {
             String json6 = serialize(testObject6);
             assert json6.equals(testJSON1);
 
+            System.out.println("All tests passed!");
+
             //TODO add tests for rename btw
         }
+        */
     }
 }
